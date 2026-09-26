@@ -1,6 +1,7 @@
 # Project Contracts
 
-Trạng thái tài liệu: `P1_IMPLEMENTED`. Domain và Strategy Contract đã có unit tests; Exchange Adapter và các runtime Safety Invariants vẫn là `DRAFT`.
+Trạng thái tài liệu: `P2_IMPLEMENTED`. Domain, Strategy và Simulator/Backtest Contract đã có unit
+tests; Exchange Adapter và các runtime Safety Invariants vẫn là `DRAFT`.
 
 ## Domain Contract
 
@@ -21,6 +22,22 @@ Trạng thái tài liệu: `P1_IMPLEMENTED`. Domain và Strategy Contract đã c
 - Mọi active level phải đạt `min_notional`; quantity sau quantization phải đạt `min_qty`.
 - Partial fill chỉ sinh replacement intent cho filled quantity hợp lệ.
 - Một strategy/level/side chỉ có tối đa một active logical order.
+
+## Simulator & Backtest Contract
+
+- Input là chuỗi `MarketTrade`/`FundingEvent` theo thứ tự thời gian; event out-of-order bị reject.
+- `MarketTrade.aggressor_side` chỉ khớp resting order phía đối diện; volume được phân bổ theo price
+  priority và không được dùng lặp lại cho nhiều level.
+- Fill xảy ra ở resting limit price. `order_latency_ms` và `queue_ahead_multiplier` là giả định mô
+  phỏng rõ ràng; queue mặc định bằng 1× order quantity để tránh fill lạc quan.
+- Replacement intent không được fill trên market event đã tạo nó và chỉ dùng quantity thực tế fill.
+- Một logical order key `(level, side)` có thể chứa nhiều intent slice nhưng chỉ xuất hiện một lần
+  trong active-order view.
+- `MAKER`/`TAKER` chọn fee rate tương ứng; fee không được hardcode trong engine mà đi qua config.
+- Funding cash flow dùng signed one-way position: rate dương làm long trả và short nhận funding.
+- Completed grid trade liên kết opening/closing fill; partial exit phân bổ opening fee theo quantity.
+- Total PnL tách realized, unrealized, fee và funding; grid profit được báo riêng với total PnL.
+- P2 không nhận OHLC candle làm bằng chứng fill và không tuyên bố mô phỏng liquidation/order book.
 
 ## Exchange Adapter Contract — DRAFT
 

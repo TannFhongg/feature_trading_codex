@@ -4,7 +4,7 @@
 |---|---|---|---|
 | P0 | Planning & Governance | `COMPLETE` | Kế hoạch, contributor guide và status reports được version control |
 | P1 | Domain Foundation | `COMPLETE` | Scaffold, typed domain, Arithmetic Grid và 27 unit tests đạt |
-| P2 | Simulator & Backtest Core | `PLANNED` — NOT STARTED | Fill/fee/funding simulation và báo cáo chỉ số chạy được |
+| P2 | Simulator & Backtest Core | `COMPLETE` | Fill/fee/funding simulation và báo cáo chỉ số chạy được |
 | P3 | Binance Public Adapter | `PLANNED` | Exchange rules, time sync và market WebSocket ổn định trên Testnet |
 | P4 | Execution & Persistence | `PLANNED` | Order lifecycle, event ledger và reconciliation idempotent |
 | P5 | Risk & Recovery | `PLANNED` | Limits, circuit breakers, restart recovery và emergency exit đạt |
@@ -18,4 +18,4 @@
 - Phát hiện lỗi safety-critical sẽ mở lại phase liên quan.
 - P8 không tự động bắt đầu sau P7; đây là gate cần quyết định của chủ dự án.
 - Mỗi phase phải có commit riêng, kết quả kiểm tra và cập nhật báo cáo trạng thái.
-- Sau P1, repository đang dừng tại phase boundary; không có công việc P2 trong phạm vi hiện tại.
+- Sau P2, repository đang dừng tại phase boundary; không có công việc P3 trong phạm vi hiện tại.
