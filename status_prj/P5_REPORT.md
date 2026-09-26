@@ -95,6 +95,7 @@ unknown emergency outcome, P4→P5 schema migration, cancel-all ambiguity và MA
 
 ## 8. Phase Boundary
 
-P5 đạt exit criteria về limits, circuit breakers, restart recovery và emergency exit. P6 — Control API
-& Observability chưa bắt đầu. Hoàn thành P5 không thay thế P6 observability, P7 authenticated Testnet
-soak, dependency/security deployment gates hoặc phê duyệt riêng cho P8 live canary.
+P5 đạt exit criteria về limits, circuit breakers, restart recovery và emergency exit. P6 — Application
+Runtime, Control API & Observability chưa bắt đầu. Hoàn thành P5 không thay thế P6 application/runtime
+và observability, P7 authenticated Testnet soak, dependency/security deployment gates hoặc phê duyệt
+riêng cho P8 live canary.
