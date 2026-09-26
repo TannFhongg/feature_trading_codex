@@ -3,18 +3,18 @@
 | ID | Rủi ro | Impact | Biện pháp chính | Trạng thái |
 |---|---|---|---|---|
 | R-001 | Timeout/503 tạo duplicate order | Critical | Deterministic client ID, persist-before-send, query-before-retry và bounded retry | `CONTROL_TESTED_P4` |
-| R-002 | WebSocket stale hoặc mất event | Critical | Market/User stream health và P5 pre-trade age gates đã có test; breaker/recovery coordinator đang triển khai | `PARTIAL_CONTROL_TESTED_P5` |
+| R-002 | WebSocket stale hoặc mất event | Critical | Market/User stream health, age gates, latched breaker và explicit recovery đã có deterministic test | `CONTROL_TESTED_P5_FAKE` |
 | R-003 | Sai tick/step/minNotional | High | `SymbolRules`, Decimal quantization và strict filter parser | `CONTROL_TESTED_P3` |
 | R-004 | Race giữa cancel và fill | High | Exchange event là nguồn sự thật; monotonic fill state và idempotent ledger | `CONTROL_TESTED_P4` |
-| R-005 | Breakout gây tích lũy vị thế/thanh lý | Critical | P5 caps, soft/hard boundary và liquidation/margin gate đã có test; emergency exit đang triển khai | `PARTIAL_CONTROL_TESTED_P5` |
+| R-005 | Breakout gây tích lũy vị thế/thanh lý | Critical | P5 caps, boundaries, liquidation/margin gate và reduce-only cancel-and-flatten đã có deterministic test | `CONTROL_TESTED_P5_FAKE` |
 | R-006 | Phí/funding xóa lợi nhuận grid | High | Backtest/ledger cùng P5 funding-rate runtime gate đã có test | `CONTROL_TESTED_P5` |
 | R-007 | Backtest quá lạc quan | High | Partial fill, latency, fee, funding, volume allocation và conservative queue; replay calibration còn thiếu | `PARTIAL_CONTROL_TESTED_P2` |
 | R-008 | Lộ API credential | Critical | `.env` ignore, redacted config repr, secret-safe errors, Testnet-first; secret manager/IP restriction còn là deployment gate | `PARTIAL_CONTROL_TESTED_P4` |
 | R-009 | Scope creep làm trễ safety work | Medium | Phase gates và boundary P1–P4 rõ ràng | `CONTROL_ACTIVE` |
 | R-010 | Dependencies chưa khóa phiên bản | Medium | Bounded ranges; cần lockfile và vulnerability scan trước service dài hạn | `OPEN` |
 | R-011 | Binance đổi private/public endpoint hoặc payload | High | Strict parsers, route-specific tests, fake contracts, public Testnet smoke và review official docs | `PARTIAL_CONTROL_TESTED_P4` |
-| R-012 | SQLite hỏng/mất hoặc không phù hợp multi-process | High | WAL, transaction, reopen test; P5/P6 cần migration, backup/restore và production datastore decision | `OPEN` |
-| R-013 | Local/exchange diverge sau restart | Critical | Audit ledger và read-only reconciliation; P5 còn thiếu restart coordinator/fail-closed resume gate | `PARTIAL_CONTROL_TESTED_P4` |
+| R-012 | SQLite hỏng/mất hoặc không phù hợp multi-process | High | WAL, transaction, reopen và P4→P5 forward-schema test; vẫn cần backup/restore và production datastore decision | `PARTIAL_CONTROL_TESTED_P5` |
+| R-013 | Local/exchange diverge sau restart | Critical | Audit ledger, reconciliation và restart coordinator chặn auto-resume cho tới explicit healthy reset | `CONTROL_TESTED_P5_FAKE` |
 
 ## Review Cadence
 

@@ -7,6 +7,7 @@ import pytest
 from trading_bot.binance import BinanceAmbiguousOrderError, BinanceApiError
 from trading_bot.domain import OrderSide
 from trading_bot.execution import (
+    AccountSnapshot,
     AccountUpdate,
     AmbiguousExecutionError,
     BalanceSnapshot,
@@ -363,6 +364,73 @@ def test_file_ledger_survives_close_and_reopen(tmp_path: object) -> None:
         await reopened.close()
         with pytest.raises(LedgerError, match="closed"):
             await reopened.get_order(order_request.client_order_id)
+
+    asyncio.run(scenario())
+
+
+def test_open_migrates_p4_position_and_account_tables(tmp_path: object) -> None:
+    import sqlite3
+    from pathlib import Path
+
+    database = Path(str(tmp_path)) / "legacy.sqlite3"
+    connection = sqlite3.connect(database)
+    connection.executescript(
+        """
+        CREATE TABLE positions (
+            symbol TEXT NOT NULL,
+            position_side TEXT NOT NULL,
+            quantity TEXT NOT NULL,
+            entry_price TEXT NOT NULL,
+            break_even_price TEXT NOT NULL,
+            unrealized_pnl TEXT NOT NULL,
+            margin_type TEXT NOT NULL,
+            isolated_wallet TEXT NOT NULL,
+            update_time_ms INTEGER NOT NULL,
+            PRIMARY KEY (symbol, position_side)
+        );
+        CREATE TABLE account_snapshots (
+            update_time_ms INTEGER PRIMARY KEY,
+            total_wallet_balance TEXT NOT NULL,
+            total_unrealized_profit TEXT NOT NULL,
+            total_margin_balance TEXT NOT NULL,
+            available_balance TEXT NOT NULL
+        );
+        """
+    )
+    connection.close()
+
+    async def scenario() -> None:
+        async with await SqliteExecutionLedger.open(database) as ledger:
+            current_position = PositionSnapshot(
+                symbol="BTCUSDT",
+                position_side="BOTH",
+                quantity=Decimal("0.1"),
+                entry_price=Decimal("30000"),
+                break_even_price=Decimal("30010"),
+                unrealized_pnl=Decimal("1"),
+                margin_type="isolated",
+                isolated_wallet=Decimal("100"),
+                update_time_ms=2,
+                mark_price=Decimal("31000"),
+                liquidation_price=Decimal("20000"),
+                notional=Decimal("3100"),
+                initial_margin=Decimal("155"),
+                maintenance_margin=Decimal("20"),
+            )
+            await ledger.record_positions((current_position,))
+            assert await ledger.list_positions("BTCUSDT") == (current_position,)
+            assert await ledger.record_account_snapshot(
+                AccountSnapshot(
+                    total_wallet_balance=Decimal("1000"),
+                    total_unrealized_profit=Decimal("1"),
+                    total_margin_balance=Decimal("1001"),
+                    available_balance=Decimal("800"),
+                    update_time_ms=2,
+                    balances=(),
+                    total_initial_margin=Decimal("155"),
+                    total_maintenance_margin=Decimal("20"),
+                )
+            )
 
     asyncio.run(scenario())
 

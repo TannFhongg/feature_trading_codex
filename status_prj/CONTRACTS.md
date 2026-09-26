@@ -2,7 +2,7 @@
 
 Trạng thái tài liệu: `P5_IN_PROGRESS`. Domain, Strategy, Simulator/Backtest, Binance Public Adapter,
 Private Execution Adapter và Persistence/Reconciliation Contract đã có test. Pre-trade Risk Contract
-của P5 đã được triển khai; recovery/emergency invariants vẫn đang hoàn thiện.
+của P5 và runtime recovery/emergency contract đã được triển khai; phase đang chờ final gate.
 
 ## Domain Contract
 
@@ -90,12 +90,25 @@ của P5 đã được triển khai; recovery/emergency invariants vẫn đang h
 - `reduceOnly` chỉ bypass entry gates khi side/quantity thực sự giảm vị thế one-way hiện tại mà không
   cross qua zero; request sai bị reject.
 
-## Runtime Recovery Invariants — IN PROGRESS P5
+## Runtime Recovery Contract — IMPLEMENTED P5
 
-- Risk engine phải được nối vào executor trước mọi normal submit.
-- Emergency exit chỉ giảm exposure bằng `reduceOnly`.
-- Restart phải reconcile database với Binance trước khi resume.
-- Duplicate/out-of-order event không được tạo duplicate order hoặc fill.
+- Risk-managed executor persist audit decision trước khi gọi durable executor; rejected intent không
+  được record order intent hoặc gọi exchange.
+- Stale market/user data, unsafe reconciliation và emergency-severity breach latch breaker. Reset chỉ
+  thành công từ snapshot `PAUSED`/`RECOVERING`, reconciled, fresh và trong mọi hard limit.
+- Restart bắt đầu ở `RECOVERING`, chạy read-only reconciliation, chuyển sang `PAUSED` khi sạch và chỉ
+  chuyển `RUNNING` sau explicit healthy resume; không auto-resume.
+- Emergency action ID là idempotency key được persist trước mutation. Duplicate action không được
+  cancel hoặc submit lần hai.
+- Emergency sequence là cancel-all → xác nhận không còn open order khi kết quả mơ hồ → refetch
+  position → MARKET `reduceOnly` theo side đối nghịch và đúng toàn bộ one-way position quantity.
+- Emergency client order ID deterministic, tối đa 36 ký tự; ambiguous submit dùng query-before-retry.
+- Emergency outcome `UNKNOWN` bắt buộc reconciliation và chỉ được chuyển sang kết quả xác định khi
+  client ID không đổi; `SUBMITTED` không tự được coi là flat hoặc safe to resume.
+- Risk decision, breaker, recovery và emergency transition có audit record idempotent trong SQLite.
+- P4 SQLite file được forward-migrate để giữ mark/liquidation/notional/initial/maintenance margin; P5
+  vẫn chưa cam kết multi-process HA, backup/restore hoặc migration framework tổng quát.
+- Duplicate/out-of-order exchange event không được tạo duplicate order hoặc fill.
 
 ## Contract Changes
 

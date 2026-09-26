@@ -20,7 +20,7 @@ from trading_bot.binance import (
     TimeSync,
 )
 from trading_bot.domain import DomainValidationError, OrderSide
-from trading_bot.execution import OrderRequest, OrderStatus
+from trading_bot.execution import EmergencyCloseRequest, OrderRequest, OrderStatus
 
 
 def order_request(**overrides: object) -> OrderRequest:
@@ -291,8 +291,12 @@ def test_private_read_contract_parses_orders_trades_account_fees_and_income() ->
                     "entryPrice": "65000.10",
                     "breakEvenPrice": "65026.10",
                     "unRealizedProfit": "1.5",
-                    "marginType": "isolated",
                     "isolatedWallet": "100",
+                    "markPrice": "66000",
+                    "liquidationPrice": "50000",
+                    "notional": "66",
+                    "initialMargin": "3.3",
+                    "maintMargin": "0.4",
                     "updateTime": 1_002,
                 }
             ],
@@ -301,6 +305,8 @@ def test_private_read_contract_parses_orders_trades_account_fees_and_income() ->
                 "totalUnrealizedProfit": "1.5",
                 "totalMarginBalance": "1001.5",
                 "availableBalance": "800",
+                "totalInitialMargin": "3.3",
+                "totalMaintMargin": "0.4",
                 "assets": [
                     {
                         "asset": "USDT",
@@ -341,8 +347,13 @@ def test_private_read_contract_parses_orders_trades_account_fees_and_income() ->
         assert orders[0].status is OrderStatus.NEW
         assert trades[0].quantity == Decimal("0.001")
         assert positions[0].quantity == Decimal("0.001")
+        assert positions[0].margin_type == "unknown"
+        assert positions[0].liquidation_price == Decimal("50000")
+        assert positions[0].maintenance_margin == Decimal("0.4")
         assert account.update_time_ms == 1_004
         assert account.available_balance == Decimal("800")
+        assert account.total_initial_margin == Decimal("3.3")
+        assert account.total_maintenance_margin == Decimal("0.4")
         assert commission.maker_rate == Decimal("0.0002")
         assert income[0].amount == Decimal("-0.10")
 
@@ -357,3 +368,55 @@ def test_private_read_contract_parses_orders_trades_account_fees_and_income() ->
         "/fapi/v1/income",
     ]
     assert dict(transport.calls[1][2])["fromId"] == "7"
+
+
+def test_emergency_market_close_is_reduce_only_and_query_before_retry() -> None:
+    request = EmergencyCloseRequest(
+        action_id="incident-1",
+        symbol="BTCUSDT",
+        side=OrderSide.SELL,
+        quantity=Decimal("0.002"),
+    )
+    confirmed = {
+        **order_payload(client_order_id=request.client_order_id),
+        "side": "SELL",
+        "price": "0",
+        "avgPrice": "65000",
+        "origQty": "0.002",
+        "executedQty": "0.002",
+        "status": "FILLED",
+        "reduceOnly": True,
+    }
+    transport = ScriptedPrivateTransport([BinanceTransportError("timeout"), confirmed])
+    client = BinancePrivateRestClient(
+        private_config(), transport=transport, clock_ms=lambda: 1_000, sleeper=no_sleep
+    )
+
+    order = asyncio.run(client.submit_reduce_only_market(request))
+
+    assert order.status is OrderStatus.FILLED
+    assert [call[:2] for call in transport.calls] == [
+        ("POST", "/fapi/v1/order"),
+        ("GET", "/fapi/v1/order"),
+    ]
+    submitted = dict(transport.calls[0][2])
+    assert submitted["type"] == "MARKET"
+    assert submitted["positionSide"] == "BOTH"
+    assert submitted["reduceOnly"] == "true"
+    assert submitted["newClientOrderId"] == request.client_order_id
+    assert "price" not in submitted
+    assert "timeInForce" not in submitted
+
+
+def test_cancel_all_uses_signed_endpoint_and_resolves_timeout_from_open_orders() -> None:
+    transport = ScriptedPrivateTransport([BinanceTransportError("timeout"), []])
+    client = BinancePrivateRestClient(
+        private_config(), transport=transport, clock_ms=lambda: 1_000, sleeper=no_sleep
+    )
+
+    asyncio.run(client.cancel_all_open_orders("BTCUSDT"))
+
+    assert [call[:2] for call in transport.calls] == [
+        ("DELETE", "/fapi/v1/allOpenOrders"),
+        ("GET", "/fapi/v1/openOrders"),
+    ]

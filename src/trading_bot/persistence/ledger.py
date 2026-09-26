@@ -25,6 +25,12 @@ from trading_bot.execution import (
     ReconciliationReport,
 )
 from trading_bot.persistence.errors import LedgerConflictError, LedgerError
+from trading_bot.risk.models import (
+    EmergencyActionRecord,
+    EmergencyActionStatus,
+    RiskAuditEvent,
+    RiskEventType,
+)
 
 _ACTIVE_STATUSES = (
     OrderStatus.PENDING_SUBMIT,
@@ -104,6 +110,11 @@ CREATE TABLE IF NOT EXISTS positions (
     margin_type TEXT NOT NULL,
     isolated_wallet TEXT NOT NULL,
     update_time_ms INTEGER NOT NULL,
+    mark_price TEXT NOT NULL DEFAULT '0',
+    liquidation_price TEXT NOT NULL DEFAULT '0',
+    notional TEXT NOT NULL DEFAULT '0',
+    initial_margin TEXT NOT NULL DEFAULT '0',
+    maintenance_margin TEXT NOT NULL DEFAULT '0',
     PRIMARY KEY (symbol, position_side)
 );
 
@@ -120,7 +131,9 @@ CREATE TABLE IF NOT EXISTS account_snapshots (
     total_wallet_balance TEXT NOT NULL,
     total_unrealized_profit TEXT NOT NULL,
     total_margin_balance TEXT NOT NULL,
-    available_balance TEXT NOT NULL
+    available_balance TEXT NOT NULL,
+    total_initial_margin TEXT NOT NULL DEFAULT '0',
+    total_maintenance_margin TEXT NOT NULL DEFAULT '0'
 );
 
 CREATE TABLE IF NOT EXISTS income_records (
@@ -146,7 +159,41 @@ CREATE TABLE IF NOT EXISTS reconciliation_runs (
     inserted_fills INTEGER NOT NULL,
     inserted_income_records INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS risk_events (
+    event_id TEXT PRIMARY KEY,
+    event_type TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    outcome TEXT NOT NULL,
+    event_time_ms INTEGER NOT NULL,
+    client_order_id TEXT,
+    reason_codes TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS emergency_actions (
+    action_id TEXT PRIMARY KEY,
+    symbol TEXT NOT NULL,
+    status TEXT NOT NULL,
+    client_order_id TEXT,
+    exchange_order_id INTEGER,
+    created_at_ms INTEGER NOT NULL,
+    updated_at_ms INTEGER NOT NULL
+);
 """
+
+_SCHEMA_MIGRATIONS = {
+    "positions": {
+        "mark_price": "TEXT NOT NULL DEFAULT '0'",
+        "liquidation_price": "TEXT NOT NULL DEFAULT '0'",
+        "notional": "TEXT NOT NULL DEFAULT '0'",
+        "initial_margin": "TEXT NOT NULL DEFAULT '0'",
+        "maintenance_margin": "TEXT NOT NULL DEFAULT '0'",
+    },
+    "account_snapshots": {
+        "total_initial_margin": "TEXT NOT NULL DEFAULT '0'",
+        "total_maintenance_margin": "TEXT NOT NULL DEFAULT '0'",
+    },
+}
 
 
 def _wall_clock_ms() -> int:
@@ -155,6 +202,16 @@ def _wall_clock_ms() -> int:
 
 def _decimal_text(value: Decimal) -> str:
     return format(value, "f")
+
+
+def _apply_schema_migrations(connection: sqlite3.Connection) -> None:
+    for table, columns in _SCHEMA_MIGRATIONS.items():
+        existing = {
+            str(row[1]) for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
+        }
+        for column, definition in columns.items():
+            if column not in existing:
+                connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
 
 class SqliteExecutionLedger:
@@ -182,6 +239,7 @@ class SqliteExecutionLedger:
             if database_path != ":memory:":
                 connection.execute("PRAGMA journal_mode = WAL")
             connection.executescript(_SCHEMA)
+            _apply_schema_migrations(connection)
             return connection
 
         try:
@@ -597,8 +655,9 @@ class SqliteExecutionLedger:
                 """
                 INSERT OR IGNORE INTO account_snapshots (
                     update_time_ms, total_wallet_balance, total_unrealized_profit,
-                    total_margin_balance, available_balance
-                ) VALUES (?, ?, ?, ?, ?)
+                    total_margin_balance, available_balance, total_initial_margin,
+                    total_maintenance_margin
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     snapshot.update_time_ms,
@@ -606,6 +665,8 @@ class SqliteExecutionLedger:
                     _decimal_text(snapshot.total_unrealized_profit),
                     _decimal_text(snapshot.total_margin_balance),
                     _decimal_text(snapshot.available_balance),
+                    _decimal_text(snapshot.total_initial_margin),
+                    _decimal_text(snapshot.total_maintenance_margin),
                 ),
             )
             for balance in snapshot.balances:
@@ -680,6 +741,11 @@ class SqliteExecutionLedger:
                 margin_type=row["margin_type"],
                 isolated_wallet=Decimal(row["isolated_wallet"]),
                 update_time_ms=row["update_time_ms"],
+                mark_price=Decimal(row["mark_price"]),
+                liquidation_price=Decimal(row["liquidation_price"]),
+                notional=Decimal(row["notional"]),
+                initial_margin=Decimal(row["initial_margin"]),
+                maintenance_margin=Decimal(row["maintenance_margin"]),
             )
             for row in rows
         )
@@ -689,8 +755,9 @@ class SqliteExecutionLedger:
             """
             INSERT INTO positions (
                 symbol, position_side, quantity, entry_price, break_even_price,
-                unrealized_pnl, margin_type, isolated_wallet, update_time_ms
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                unrealized_pnl, margin_type, isolated_wallet, update_time_ms, mark_price,
+                liquidation_price, notional, initial_margin, maintenance_margin
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(symbol, position_side) DO UPDATE SET
                 quantity = excluded.quantity,
                 entry_price = excluded.entry_price,
@@ -698,7 +765,12 @@ class SqliteExecutionLedger:
                 unrealized_pnl = excluded.unrealized_pnl,
                 margin_type = excluded.margin_type,
                 isolated_wallet = excluded.isolated_wallet,
-                update_time_ms = excluded.update_time_ms
+                update_time_ms = excluded.update_time_ms,
+                mark_price = excluded.mark_price,
+                liquidation_price = excluded.liquidation_price,
+                notional = excluded.notional,
+                initial_margin = excluded.initial_margin,
+                maintenance_margin = excluded.maintenance_margin
             WHERE excluded.update_time_ms >= positions.update_time_ms
             """,
             (
@@ -711,6 +783,11 @@ class SqliteExecutionLedger:
                 position.margin_type,
                 _decimal_text(position.isolated_wallet),
                 position.update_time_ms,
+                _decimal_text(position.mark_price),
+                _decimal_text(position.liquidation_price),
+                _decimal_text(position.notional),
+                _decimal_text(position.initial_margin),
+                _decimal_text(position.maintenance_margin),
             ),
         )
 
@@ -861,6 +938,201 @@ class SqliteExecutionLedger:
                 report.inserted_fills,
                 report.inserted_income_records,
             ),
+        )
+
+    async def record_risk_event(self, event: RiskAuditEvent) -> bool:
+        return await self._call(self._record_risk_event_sync, event)
+
+    def _record_risk_event_sync(self, event: RiskAuditEvent) -> bool:
+        cursor = self._connection.execute(
+            """
+            INSERT OR IGNORE INTO risk_events (
+                event_id, event_type, symbol, outcome, event_time_ms,
+                client_order_id, reason_codes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                event.event_id,
+                event.event_type.value,
+                event.symbol,
+                event.outcome,
+                event.event_time_ms,
+                event.client_order_id,
+                ",".join(event.reason_codes),
+            ),
+        )
+        return cursor.rowcount == 1
+
+    async def list_risk_events(self) -> tuple[RiskAuditEvent, ...]:
+        return await self._call(self._list_risk_events_sync)
+
+    def _list_risk_events_sync(self) -> tuple[RiskAuditEvent, ...]:
+        rows = self._connection.execute(
+            "SELECT * FROM risk_events ORDER BY event_time_ms, event_id"
+        ).fetchall()
+        return tuple(
+            RiskAuditEvent(
+                event_type=RiskEventType(row["event_type"]),
+                symbol=row["symbol"],
+                outcome=row["outcome"],
+                event_time_ms=row["event_time_ms"],
+                client_order_id=row["client_order_id"],
+                reason_codes=tuple(filter(None, str(row["reason_codes"]).split(","))),
+            )
+            for row in rows
+        )
+
+    async def begin_emergency_action(
+        self,
+        action_id: str,
+        symbol: str,
+        created_at_ms: int,
+    ) -> bool:
+        EmergencyActionRecord(
+            action_id=action_id,
+            symbol=symbol,
+            status=EmergencyActionStatus.PENDING,
+            client_order_id=None,
+            exchange_order_id=None,
+            created_at_ms=created_at_ms,
+            updated_at_ms=created_at_ms,
+        )
+        return await self._call(
+            self._begin_emergency_action_sync,
+            action_id,
+            symbol,
+            created_at_ms,
+        )
+
+    def _begin_emergency_action_sync(
+        self,
+        action_id: str,
+        symbol: str,
+        created_at_ms: int,
+    ) -> bool:
+        cursor = self._connection.execute(
+            """
+            INSERT OR IGNORE INTO emergency_actions (
+                action_id, symbol, status, client_order_id, exchange_order_id,
+                created_at_ms, updated_at_ms
+            ) VALUES (?, ?, ?, NULL, NULL, ?, ?)
+            """,
+            (
+                action_id,
+                symbol,
+                EmergencyActionStatus.PENDING.value,
+                created_at_ms,
+                created_at_ms,
+            ),
+        )
+        if cursor.rowcount == 1:
+            return True
+        row = self._connection.execute(
+            "SELECT symbol FROM emergency_actions WHERE action_id = ?",
+            (action_id,),
+        ).fetchone()
+        if row is None or row["symbol"] != symbol:
+            raise LedgerConflictError("emergency action ID belongs to a different symbol")
+        return False
+
+    async def complete_emergency_action(
+        self,
+        action_id: str,
+        status: EmergencyActionStatus,
+        *,
+        client_order_id: str | None,
+        exchange_order_id: int | None,
+        updated_at_ms: int,
+    ) -> None:
+        if not isinstance(status, EmergencyActionStatus):
+            raise TypeError("status must be EmergencyActionStatus")
+        await self._call(
+            self._complete_emergency_action_sync,
+            action_id,
+            status,
+            client_order_id,
+            exchange_order_id,
+            updated_at_ms,
+        )
+
+    def _complete_emergency_action_sync(
+        self,
+        action_id: str,
+        status: EmergencyActionStatus,
+        client_order_id: str | None,
+        exchange_order_id: int | None,
+        updated_at_ms: int,
+    ) -> None:
+        row = self._connection.execute(
+            "SELECT * FROM emergency_actions WHERE action_id = ?",
+            (action_id,),
+        ).fetchone()
+        if row is None:
+            raise LedgerConflictError("emergency action must be persisted before completion")
+        if status is EmergencyActionStatus.PENDING:
+            raise LedgerConflictError("emergency completion status must be terminal or unknown")
+        if updated_at_ms < int(row["created_at_ms"]):
+            raise LedgerConflictError("emergency completion cannot precede action creation")
+        if updated_at_ms < int(row["updated_at_ms"]):
+            raise LedgerConflictError("emergency action update time cannot move backwards")
+        current_status = EmergencyActionStatus(row["status"])
+        if current_status in {
+            EmergencyActionStatus.NO_POSITION,
+            EmergencyActionStatus.SUBMITTED,
+        }:
+            if (
+                current_status is status
+                and row["client_order_id"] == client_order_id
+                and row["exchange_order_id"] == exchange_order_id
+            ):
+                return
+            raise LedgerConflictError("completed emergency action cannot change outcome")
+        if current_status is EmergencyActionStatus.UNKNOWN:
+            if status is EmergencyActionStatus.UNKNOWN:
+                if (
+                    row["client_order_id"] == client_order_id
+                    and row["exchange_order_id"] == exchange_order_id
+                ):
+                    return
+                raise LedgerConflictError("unknown emergency action metadata cannot change")
+            if row["client_order_id"] not in {None, client_order_id}:
+                raise LedgerConflictError("reconciled emergency action changed client order ID")
+        self._connection.execute(
+            """
+            UPDATE emergency_actions
+            SET status = ?, client_order_id = ?, exchange_order_id = ?, updated_at_ms = ?
+            WHERE action_id = ?
+            """,
+            (
+                status.value,
+                client_order_id,
+                exchange_order_id,
+                updated_at_ms,
+                action_id,
+            ),
+        )
+
+    async def get_emergency_action(
+        self,
+        action_id: str,
+    ) -> EmergencyActionRecord | None:
+        return await self._call(self._get_emergency_action_sync, action_id)
+
+    def _get_emergency_action_sync(self, action_id: str) -> EmergencyActionRecord | None:
+        row = self._connection.execute(
+            "SELECT * FROM emergency_actions WHERE action_id = ?",
+            (action_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return EmergencyActionRecord(
+            action_id=row["action_id"],
+            symbol=row["symbol"],
+            status=EmergencyActionStatus(row["status"]),
+            client_order_id=row["client_order_id"],
+            exchange_order_id=row["exchange_order_id"],
+            created_at_ms=row["created_at_ms"],
+            updated_at_ms=row["updated_at_ms"],
         )
 
     async def count_exchange_events(self) -> int:

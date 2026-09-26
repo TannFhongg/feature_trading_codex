@@ -105,6 +105,15 @@ def parse_exchange_orders(payload: object) -> tuple[ExchangeOrder, ...]:
     return tuple(parse_exchange_order(item) for item in values)
 
 
+def parse_cancel_all_orders(payload: object) -> None:
+    """Validate the signed cancel-all acknowledgement without retaining its message."""
+
+    item = _as_mapping(payload, "cancel all orders response")
+    if _as_non_negative_int(item.get("code"), "cancelAll.code") != 200:
+        raise BinanceProtocolError("cancelAll.code must be 200")
+    _as_string(item.get("msg"), "cancelAll.msg")
+
+
 def parse_account_trades(payload: object) -> tuple[ExchangeFill, ...]:
     values = _as_sequence(payload, "account trades response")
     fills: list[ExchangeFill] = []
@@ -155,12 +164,27 @@ def parse_positions(payload: object) -> tuple[PositionSnapshot, ...]:
                 unrealized_pnl=_as_decimal(
                     item.get("unRealizedProfit"), f"positions[{index}].unRealizedProfit"
                 ),
-                margin_type=_as_string(item.get("marginType"), f"positions[{index}].marginType"),
+                margin_type=_as_string(
+                    item.get("marginType", "unknown"), f"positions[{index}].marginType"
+                ),
                 isolated_wallet=_as_non_negative_decimal(
                     item.get("isolatedWallet"), f"positions[{index}].isolatedWallet"
                 ),
                 update_time_ms=_as_non_negative_int(
                     item.get("updateTime"), f"positions[{index}].updateTime"
+                ),
+                mark_price=_as_non_negative_decimal(
+                    item.get("markPrice"), f"positions[{index}].markPrice"
+                ),
+                liquidation_price=_as_non_negative_decimal(
+                    item.get("liquidationPrice"), f"positions[{index}].liquidationPrice"
+                ),
+                notional=_as_decimal(item.get("notional"), f"positions[{index}].notional"),
+                initial_margin=_as_non_negative_decimal(
+                    item.get("initialMargin"), f"positions[{index}].initialMargin"
+                ),
+                maintenance_margin=_as_non_negative_decimal(
+                    item.get("maintMargin"), f"positions[{index}].maintMargin"
                 ),
             )
         )
@@ -217,6 +241,12 @@ def parse_account_snapshot(payload: object) -> AccountSnapshot:
         available_balance=_as_decimal(root.get("availableBalance"), "account.availableBalance"),
         update_time_ms=update_time_ms,
         balances=tuple(balances),
+        total_initial_margin=_as_non_negative_decimal(
+            root.get("totalInitialMargin"), "account.totalInitialMargin"
+        ),
+        total_maintenance_margin=_as_non_negative_decimal(
+            root.get("totalMaintMargin"), "account.totalMaintMargin"
+        ),
     )
 
 

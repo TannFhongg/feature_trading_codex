@@ -34,13 +34,18 @@
 - P5: deterministic pre-trade risk engine với position/notional/open-order caps, loss/drawdown/funding,
   margin/liquidation, stale/reconciliation gates và soft/hard price boundaries.
 - P5: `reduceOnly` exit chỉ được duyệt khi thực sự giảm vị thế one-way mà không cross qua zero.
+- P5: latched circuit breaker, risk-audited executor và restart coordinator chặn auto-resume cho tới
+  khi reconciliation cùng runtime snapshot đều an toàn.
+- P5: persist-before-mutation emergency cancel-all và deterministic MARKET `reduceOnly`, với
+  query-before-retry cho kết quả mơ hồ và durable `UNKNOWN` outcome.
+- P5: SQLite lưu risk/emergency audit và forward-migrate P4 position/account tables để giữ mark,
+  liquidation, notional và margin fields.
 - Cấu hình private mặc định tới USDⓈ-M Futures Testnet; order submission bị khóa mặc định. Mainnet
   submission cần bật riêng cả `order_submission_enabled` và `live_trading_enabled`.
 
 ## Chưa triển khai
 
-- P5 chưa hoàn tất breaker có latch, restart coordinator, risk-aware executor, emergency
-  cancel-and-flatten và risk-event persistence.
+- P5 đã triển khai code chính; còn completion report, review regression cuối và supported-Python gate.
 - Chưa có application entry point, strategy runtime loop, control API, metrics/alerts, CI/CD hoặc
   deployment tooling.
 - SQLite ledger hiện dành cho single-process/local runtime; chưa có PostgreSQL, migration framework,
@@ -55,11 +60,12 @@
 
 - Báo cáo: [`P1_REPORT.md`](P1_REPORT.md), [`P2_REPORT.md`](P2_REPORT.md),
   [`P3_REPORT.md`](P3_REPORT.md), [`P4_REPORT.md`](P4_REPORT.md).
-- Unit/default suite: 113 passed, 3 public integration tests skipped theo thiết kế trên cả Python
-  3.12.10 và 3.14.
+- Unit/default suite hiện tại: 141 passed, 3 public integration tests skipped theo thiết kế trên Python
+  3.14; Python 3.12 sẽ được chạy lại ở final P5 gate.
 - Public Testnet smoke: 3 passed trong 13.53 giây trên Python 3.12, không dùng credential.
 - P4 focused suite: 39 passed, gồm private REST, User Data Stream, ledger và reconciliation.
 - P5 risk-engine focused suite: 18 passed.
+- P5 risk/recovery focused suite: 25 passed, gồm limits, breaker, restart, audit và emergency exit.
 - `ruff check .`: passed; `ruff format --check .`: 56 files formatted.
 - `mypy src`: passed ở strict mode trên 30 source files.
 - `python -m pip check`: passed; no broken requirements.
@@ -67,6 +73,6 @@
 
 ## Next Gate
 
-Hoàn thành breaker có latch, restart gate, executor bắt buộc risk approval, emergency reduce-only exit
-và audit persistence; sau đó chạy full quality gate để quyết định `P5_COMPLETE`. Trạng thái
-`P5_IN_PROGRESS` không cho phép authenticated Testnet soak hoặc live trading.
+Hoàn thành completion report, review regression và full quality gate trên Python 3.12/3.14 để quyết
+định `P5_COMPLETE`. Trạng thái `P5_IN_PROGRESS` không cho phép authenticated Testnet soak hoặc live
+trading.

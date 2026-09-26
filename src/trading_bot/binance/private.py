@@ -22,6 +22,7 @@ from trading_bot.binance.models import BinancePrivateConfig, TimeSync
 from trading_bot.binance.private_parsing import (
     parse_account_snapshot,
     parse_account_trades,
+    parse_cancel_all_orders,
     parse_commission_rates,
     parse_exchange_order,
     parse_exchange_orders,
@@ -32,6 +33,7 @@ from trading_bot.binance.private_parsing import (
 from trading_bot.execution import (
     AccountSnapshot,
     CommissionRates,
+    EmergencyCloseRequest,
     ExchangeFill,
     ExchangeOrder,
     IncomeRecord,
@@ -205,6 +207,67 @@ class BinancePrivateRestClient:
                     ) from error
                 await self._sleeper(self._config.ambiguous_retry_delay_seconds)
         raise AssertionError("ambiguous submit loop exhausted")
+
+    async def submit_reduce_only_market(
+        self,
+        request: EmergencyCloseRequest,
+    ) -> ExchangeOrder:
+        """Submit a deterministic one-way MARKET close, resolving ambiguity before retry."""
+
+        if not self._config.order_submission_enabled:
+            raise BinanceOrderSubmissionDisabledError(
+                "order submission is disabled; enable it explicitly for Testnet or "
+                "approved live use"
+            )
+        params = (
+            ("symbol", request.symbol),
+            ("side", request.side.value),
+            ("positionSide", "BOTH"),
+            ("type", "MARKET"),
+            ("quantity", _decimal_parameter(request.quantity)),
+            ("reduceOnly", "true"),
+            ("newClientOrderId", request.client_order_id),
+            ("newOrderRespType", "RESULT"),
+        )
+        for attempt in range(1, self._config.ambiguous_request_max_attempts + 1):
+            try:
+                payload = await self._signed_request("POST", "/fapi/v1/order", params)
+                return parse_exchange_order(payload)
+            except (BinanceTransportError, BinanceHttpError) as error:
+                if not _is_ambiguous(error):
+                    raise
+                resolved = await self._query_after_ambiguous(
+                    request.symbol, request.client_order_id
+                )
+                if resolved is not None:
+                    return resolved
+                if attempt == self._config.ambiguous_request_max_attempts:
+                    raise BinanceAmbiguousOrderError(
+                        request.client_order_id, "emergency close"
+                    ) from error
+                await self._sleeper(self._config.ambiguous_retry_delay_seconds)
+        raise AssertionError("ambiguous emergency close loop exhausted")
+
+    async def cancel_all_open_orders(self, symbol: str) -> None:
+        """Cancel all standard orders and verify ambiguous outcomes by listing open orders."""
+
+        params = (("symbol", symbol),)
+        for attempt in range(1, self._config.ambiguous_request_max_attempts + 1):
+            try:
+                payload = await self._signed_request("DELETE", "/fapi/v1/allOpenOrders", params)
+                parse_cancel_all_orders(payload)
+                return
+            except (BinanceTransportError, BinanceHttpError) as error:
+                if not _is_ambiguous(error):
+                    raise
+                if not await self.list_open_orders(symbol):
+                    return
+                if attempt == self._config.ambiguous_request_max_attempts:
+                    raise BinanceAmbiguousOrderError(
+                        f"all-open-orders:{symbol}", "cancel-all"
+                    ) from error
+                await self._sleeper(self._config.ambiguous_retry_delay_seconds)
+        raise AssertionError("ambiguous cancel-all loop exhausted")
 
     async def cancel_order(
         self,

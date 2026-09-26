@@ -10,6 +10,7 @@ from trading_bot.execution.models import (
     AccountUpdate,
     BalanceSnapshot,
     CommissionRates,
+    EmergencyCloseRequest,
     ExchangeFill,
     ExchangeOrder,
     ExecutionType,
@@ -25,6 +26,7 @@ from trading_bot.execution.models import (
     UserDataEvent,
     UserStreamNotice,
     deterministic_client_order_id,
+    deterministic_emergency_order_id,
 )
 from trading_bot.execution.reconciliation import (
     ExecutionReconciler,
@@ -43,6 +45,7 @@ __all__ = [
     "AmbiguousExecutionError",
     "BalanceSnapshot",
     "CommissionRates",
+    "EmergencyCloseRequest",
     "ExchangeFill",
     "ExchangeOrder",
     "ExecutionAdapterError",
@@ -66,4 +69,5 @@ __all__ = [
     "UserDataEvent",
     "UserStreamNotice",
     "deterministic_client_order_id",
+    "deterministic_emergency_order_id",
 ]

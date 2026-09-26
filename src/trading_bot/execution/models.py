@@ -89,6 +89,15 @@ def deterministic_client_order_id(
     return f"grid-{side.value[0].lower()}-{digest}"
 
 
+def deterministic_emergency_order_id(action_id: str, symbol: str) -> str:
+    """Build a stable 36-character client ID for one emergency close action."""
+
+    action_id = _require_non_empty("action_id", action_id)
+    _validate_symbol(symbol)
+    digest = sha256(f"{action_id}|{symbol}".encode()).hexdigest()[:26]
+    return f"emergency-{digest}"
+
+
 class OrderStatus(StrEnum):
     """Local and exchange order lifecycle states persisted by the P4 ledger."""
 
@@ -165,6 +174,27 @@ class OrderRequest:
             self.side,
             self.cycle,
         )
+
+
+@dataclass(frozen=True, slots=True)
+class EmergencyCloseRequest:
+    """One-way-mode MARKET request that can only reduce an existing position."""
+
+    action_id: str
+    symbol: str
+    side: OrderSide
+    quantity: Decimal
+
+    def __post_init__(self) -> None:
+        _require_non_empty("action_id", self.action_id)
+        _validate_symbol(self.symbol)
+        if not isinstance(self.side, OrderSide):
+            raise TypeError("side must be OrderSide")
+        _require_decimal("quantity", self.quantity, positive=True)
+
+    @property
+    def client_order_id(self) -> str:
+        return deterministic_emergency_order_id(self.action_id, self.symbol)
 
 
 @dataclass(frozen=True, slots=True)
@@ -247,6 +277,11 @@ class PositionSnapshot:
     margin_type: str
     isolated_wallet: Decimal
     update_time_ms: int
+    mark_price: Decimal = Decimal("0")
+    liquidation_price: Decimal = Decimal("0")
+    notional: Decimal = Decimal("0")
+    initial_margin: Decimal = Decimal("0")
+    maintenance_margin: Decimal = Decimal("0")
 
     def __post_init__(self) -> None:
         _validate_symbol(self.symbol)
@@ -258,6 +293,11 @@ class PositionSnapshot:
         _require_non_empty("margin_type", self.margin_type)
         _require_decimal("isolated_wallet", self.isolated_wallet, non_negative=True)
         _require_non_negative_int("update_time_ms", self.update_time_ms)
+        _require_decimal("mark_price", self.mark_price, non_negative=True)
+        _require_decimal("liquidation_price", self.liquidation_price, non_negative=True)
+        _require_decimal("notional", self.notional)
+        _require_decimal("initial_margin", self.initial_margin, non_negative=True)
+        _require_decimal("maintenance_margin", self.maintenance_margin, non_negative=True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -288,6 +328,8 @@ class AccountSnapshot:
     available_balance: Decimal
     update_time_ms: int
     balances: tuple[BalanceSnapshot, ...]
+    total_initial_margin: Decimal = Decimal("0")
+    total_maintenance_margin: Decimal = Decimal("0")
 
     def __post_init__(self) -> None:
         _require_decimal("total_wallet_balance", self.total_wallet_balance)
@@ -297,6 +339,10 @@ class AccountSnapshot:
         _require_non_negative_int("update_time_ms", self.update_time_ms)
         if any(not isinstance(balance, BalanceSnapshot) for balance in self.balances):
             raise TypeError("balances must contain BalanceSnapshot values")
+        _require_decimal("total_initial_margin", self.total_initial_margin, non_negative=True)
+        _require_decimal(
+            "total_maintenance_margin", self.total_maintenance_margin, non_negative=True
+        )
 
 
 @dataclass(frozen=True, slots=True)

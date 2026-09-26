@@ -3,8 +3,10 @@
 from dataclasses import dataclass
 from decimal import Decimal
 from enum import StrEnum
+from hashlib import sha256
 
 from trading_bot.domain import DomainValidationError, OrderSide, StrategyState
+from trading_bot.execution.models import ExchangeOrder, ReconciliationReport
 
 
 def _require_decimal(
@@ -69,6 +71,32 @@ class RiskSeverity(StrEnum):
 
     BLOCK = "BLOCK"
     EMERGENCY = "EMERGENCY"
+
+
+class CircuitBreakerState(StrEnum):
+    """A breaker is either ready for entries or latched until explicit recovery."""
+
+    ARMED = "ARMED"
+    TRIPPED = "TRIPPED"
+
+
+class RiskEventType(StrEnum):
+    """Audit event categories persisted by the P5 ledger extension."""
+
+    DECISION = "DECISION"
+    BREAKER_TRIPPED = "BREAKER_TRIPPED"
+    BREAKER_RESET = "BREAKER_RESET"
+    RECOVERY = "RECOVERY"
+    EMERGENCY = "EMERGENCY"
+
+
+class EmergencyActionStatus(StrEnum):
+    """Durable emergency-action outcomes; UNKNOWN always requires reconciliation."""
+
+    PENDING = "PENDING"
+    NO_POSITION = "NO_POSITION"
+    SUBMITTED = "SUBMITTED"
+    UNKNOWN = "UNKNOWN"
 
 
 @dataclass(frozen=True, slots=True)
@@ -253,6 +281,129 @@ class RiskDecision:
     @property
     def emergency_stop_required(self) -> bool:
         return any(violation.severity is RiskSeverity.EMERGENCY for violation in self.violations)
+
+
+@dataclass(frozen=True, slots=True)
+class RiskAuditEvent:
+    """Secret-free, deterministic audit record for a risk/recovery transition."""
+
+    event_type: RiskEventType
+    symbol: str
+    outcome: str
+    event_time_ms: int
+    client_order_id: str | None = None
+    reason_codes: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.event_type, RiskEventType):
+            raise TypeError("event_type must be RiskEventType")
+        _validate_symbol(self.symbol)
+        if not isinstance(self.outcome, str) or not self.outcome:
+            raise DomainValidationError("outcome must be a non-empty string")
+        _require_non_negative_int("event_time_ms", self.event_time_ms)
+        if self.client_order_id is not None and not self.client_order_id:
+            raise DomainValidationError("client_order_id must be non-empty when supplied")
+        if any(not isinstance(code, str) or not code for code in self.reason_codes):
+            raise DomainValidationError("reason_codes must contain non-empty strings")
+
+    @property
+    def event_id(self) -> str:
+        values = (
+            self.event_type.value,
+            self.symbol,
+            self.outcome,
+            str(self.event_time_ms),
+            self.client_order_id or "",
+            ",".join(self.reason_codes),
+        )
+        return f"risk:{sha256('|'.join(values).encode()).hexdigest()}"
+
+    @classmethod
+    def from_decision(
+        cls,
+        decision: RiskDecision,
+        symbol: str,
+        event_time_ms: int,
+    ) -> "RiskAuditEvent":
+        return cls(
+            event_type=RiskEventType.DECISION,
+            symbol=symbol,
+            outcome="APPROVED" if decision.approved else "REJECTED",
+            event_time_ms=event_time_ms,
+            client_order_id=decision.client_order_id,
+            reason_codes=tuple(violation.reason.value for violation in decision.violations),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class EmergencyActionRecord:
+    """Persistent state of one idempotent emergency cancel-and-flatten attempt."""
+
+    action_id: str
+    symbol: str
+    status: EmergencyActionStatus
+    client_order_id: str | None
+    exchange_order_id: int | None
+    created_at_ms: int
+    updated_at_ms: int
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.action_id, str) or not self.action_id:
+            raise DomainValidationError("action_id must be a non-empty string")
+        _validate_symbol(self.symbol)
+        if not isinstance(self.status, EmergencyActionStatus):
+            raise TypeError("status must be EmergencyActionStatus")
+        if self.client_order_id is not None and not self.client_order_id:
+            raise DomainValidationError("client_order_id must be non-empty when supplied")
+        if self.exchange_order_id is not None:
+            _require_non_negative_int("exchange_order_id", self.exchange_order_id)
+        _require_non_negative_int("created_at_ms", self.created_at_ms)
+        _require_non_negative_int("updated_at_ms", self.updated_at_ms)
+        if self.updated_at_ms < self.created_at_ms:
+            raise DomainValidationError("updated_at_ms must not precede created_at_ms")
+
+
+@dataclass(frozen=True, slots=True)
+class EmergencyExitResult:
+    """Result returned after cancel-all and optional reduce-only MARKET submission."""
+
+    action_id: str
+    symbol: str
+    position_quantity_before_close: Decimal
+    close_order: ExchangeOrder | None
+    status: EmergencyActionStatus
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.action_id, str) or not self.action_id:
+            raise DomainValidationError("action_id must be a non-empty string")
+        _validate_symbol(self.symbol)
+        _require_decimal("position_quantity_before_close", self.position_quantity_before_close)
+        if self.close_order is not None and not isinstance(self.close_order, ExchangeOrder):
+            raise TypeError("close_order must be ExchangeOrder or None")
+        if not isinstance(self.status, EmergencyActionStatus):
+            raise TypeError("status must be EmergencyActionStatus")
+        if self.status is EmergencyActionStatus.SUBMITTED and self.close_order is None:
+            raise DomainValidationError("SUBMITTED emergency result requires close_order")
+        if self.status is EmergencyActionStatus.NO_POSITION and self.close_order is not None:
+            raise DomainValidationError("NO_POSITION emergency result must not have close_order")
+
+
+@dataclass(frozen=True, slots=True)
+class RecoveryResult:
+    """Restart reconciliation outcome; safe recovery pauses before explicit resume."""
+
+    state: StrategyState
+    report: ReconciliationReport
+
+    def __post_init__(self) -> None:
+        if self.state not in {StrategyState.PAUSED, StrategyState.RECOVERING}:
+            raise DomainValidationError("recovery state must be PAUSED or RECOVERING")
+        if not isinstance(self.report, ReconciliationReport):
+            raise TypeError("report must be ReconciliationReport")
+
+    @property
+    def safe_to_resume(self) -> bool:
+        return self.state is StrategyState.PAUSED and self.report.safe_to_resume
 
 
 def projected_position(quantity: Decimal, side: OrderSide, order_quantity: Decimal) -> Decimal:

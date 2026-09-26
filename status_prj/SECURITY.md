@@ -17,6 +17,8 @@
 | CI security checks | `NOT_AVAILABLE` | Chưa có CI |
 | Numeric safety | `PASS_P4` | Financial models/parsers dùng `Decimal`; binary float bị reject |
 | Persistence security | `LOCAL_ONLY` | SQLite không chứa credential; account/trading data vẫn phải được bảo vệ ở deployment |
+| Runtime risk approval | `PASS_P5_FAKE` | Mọi normal submit qua risk-managed boundary; decision được audit trước durable executor |
+| Emergency exit | `PASS_P5_FAKE` | Persist-before-mutation, cancel-all và deterministic MARKET `reduceOnly`; chưa chạy authenticated Testnet |
 
 ## Authenticated Testnet Gate
 
@@ -25,8 +27,8 @@ Trước khi chạy private Testnet bằng tài khoản thật phải:
 - Cấp API key Testnet riêng qua environment hoặc secret manager, tuyệt đối không commit.
 - Xác minh withdrawal bị tắt và áp dụng IP restriction nếu môi trường hỗ trợ.
 - Xác minh log/telemetry redact API key, signature, headers và account identifiers end-to-end.
-- Thêm P5 risk approval, stale-feed breaker, restart reconciliation gate và kill switch trước runtime
-  tự động gửi lệnh.
+- P5 risk approval, stale-feed breaker, restart reconciliation gate và kill switch đã có deterministic
+  test; phải xác minh lại trên authenticated Testnet trước runtime tự động gửi lệnh.
 - Có dependency lock và vulnerability scan trước long-running soak.
 
 ## Live Canary Gate

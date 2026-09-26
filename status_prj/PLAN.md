@@ -51,6 +51,16 @@ Testnet-or-fake. P4 không bổ sung strategy loop, risk approval, emergency exi
 4. Loss, drawdown, funding, margin ratio, liquidation distance cùng soft/hard price boundaries.
 5. Exit `reduceOnly` chỉ được phép khi giảm nghiêm ngặt vị thế hiện tại và không cross qua zero.
 
-Các mốc còn lại của P5 là breaker có latch, restart recovery coordinator, risk-aware executor,
-emergency cancel-and-flatten, audit persistence và full quality gate. Order submission vẫn tắt theo
-mặc định; P5 không tự bật Testnet hay live trading.
+Mốc recovery/execution safety cũng đã hoàn thành:
+
+6. Breaker latch stale/reconciliation và hard-risk breach; chỉ reset từ snapshot paused/recovering,
+   fresh, reconciled và nằm trong toàn bộ hard limits.
+7. Risk-managed executor audit quyết định trước khi gọi durable executor; rejected intent không chạm
+   network.
+8. Restart coordinator luôn reconcile trước, dừng ở `PAUSED` và cần explicit healthy resume.
+9. Emergency action persist-before-mutation, cancel-all, refetch one-way position rồi submit MARKET
+   `reduceOnly` với deterministic client ID và query-before-retry.
+10. SQLite audit risk/emergency state cùng forward migration cho P4 position/account risk fields.
+
+Còn lại của P5 là completion report, review regression cuối và quality gate trên Python được hỗ trợ.
+Order submission vẫn tắt theo mặc định; P5 không tự bật Testnet hay live trading.
