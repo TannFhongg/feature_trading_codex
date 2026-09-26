@@ -32,6 +32,7 @@
 
 ## Bằng chứng xác minh
 
+- Báo cáo bàn giao chi tiết: [`P1_REPORT.md`](P1_REPORT.md).
 - Domain scaffold: commit `3fe45a0`.
 - Arithmetic Grid: commit `534ff4d`.
 - `pytest`: 27 passed.

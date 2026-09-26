@@ -5,6 +5,7 @@
 ## Danh mục báo cáo
 
 - `STATUS.md`: ảnh chụp trạng thái hiện tại và bằng chứng xác minh.
+- `P1_REPORT.md`: báo cáo bàn giao chi tiết cho Phase 1 — Domain Foundation.
 - `PHASES.md`: các phase, điều kiện vào/ra và trạng thái.
 - `PLAN.md`: phạm vi công việc tiếp theo và Definition of Done.
 - `SCHEDULE.md`: thứ tự phụ thuộc và ước lượng thời gian.
