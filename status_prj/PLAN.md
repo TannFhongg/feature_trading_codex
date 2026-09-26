@@ -25,13 +25,29 @@
 7. Báo cáo PnL, grid profit, drawdown, inventory, notional, fill ratio và funding/PnL ratio.
 8. 48 unit-test cases; pytest, Ruff, mypy strict và pip check đều đạt.
 
+## P3 — Binance Public Adapter: COMPLETE
+
+Đã bàn giao:
+
+1. Async public REST client, mặc định dùng USDⓈ-M Futures Testnet và không nhận credential.
+2. Strict parser cho `exchangeInfo`, chỉ chấp nhận active USDT perpetual và lấy đúng `tickSize`,
+   `stepSize`, `minQty`, `notional` từ filters.
+3. Server-time synchronization theo midpoint, chọn mẫu có round-trip time thấp nhất.
+4. Retry có giới hạn cho public GET, exponential backoff, tôn trọng `Retry-After` và không retry khi
+   Binance trả `418`.
+5. Typed WebSocket events dùng `Decimal` cho aggregate trade, mark price/funding và best bid/ask.
+6. Route split hiện hành: aggregate trade/mark price qua `/market`, book ticker qua `/public`.
+7. Automatic ping/pong, bounded queue, stale detection, reconnect backoff và health snapshot.
+8. Reject event đi lùi theo từng stream type; stream Public và Market chạy trên connection riêng.
+9. 74 unit tests và 3 public Testnet integration tests; toàn bộ quality gates đạt.
+
 ## Phase Boundary
 
-Không có phase triển khai nào đang được phép tiếp tục trong phạm vi hiện tại. P3 — Binance Public
-Adapter vẫn là `PLANNED/NOT_STARTED`; cần yêu cầu mới trước khi thêm network/Testnet code.
+P3 đã hoàn thành. P4 — Execution & Persistence vẫn là `PLANNED/NOT_STARTED`; chưa có signed REST,
+User Data Stream, submit/cancel order, database, event ledger hoặc reconciliation. Cần yêu cầu mới của
+chủ dự án trước khi bắt đầu P4.
 
-## P3 Preview — Chưa triển khai
+## P4 Preview — Chưa triển khai
 
-Khi được phê duyệt, P3 dự kiến bổ sung exchange rules, server-time synchronization, public market
-stream, reconnect/stale detection và Testnet-facing integration tests. Preview này không phải bằng
-chứng P3 đã bắt đầu.
+P4 dự kiến bổ sung deterministic client order ID, private order/user-data adapter, idempotent event
+ledger, persistence và reconciliation. Preview này không cho phép gửi lệnh hoặc dùng credential.

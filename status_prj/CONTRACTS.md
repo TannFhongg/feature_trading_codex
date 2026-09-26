@@ -1,7 +1,8 @@
 # Project Contracts
 
-Trạng thái tài liệu: `P2_IMPLEMENTED`. Domain, Strategy và Simulator/Backtest Contract đã có unit
-tests; Exchange Adapter và các runtime Safety Invariants vẫn là `DRAFT`.
+Trạng thái tài liệu: `P3_IMPLEMENTED`. Domain, Strategy, Simulator/Backtest và Binance Public Adapter
+Contract đã có unit/integration tests; private execution, persistence và các runtime Safety Invariants
+vẫn là `DRAFT`.
 
 ## Domain Contract
 
@@ -39,9 +40,29 @@ tests; Exchange Adapter và các runtime Safety Invariants vẫn là `DRAFT`.
 - Total PnL tách realized, unrealized, fee và funding; grid profit được báo riêng với total PnL.
 - P2 không nhận OHLC candle làm bằng chứng fill và không tuyên bố mô phỏng liquidation/order book.
 
-## Exchange Adapter Contract — DRAFT
+## Binance Public Adapter Contract — IMPLEMENTED P3
 
-- Interface async cho time sync, exchange rules, market stream, submit, cancel và query.
+- Mọi network boundary là async; endpoint mặc định là USDⓈ-M Futures Testnet và không cần credential.
+- Public REST chỉ gọi `GET /fapi/v1/time` và `GET /fapi/v1/exchangeInfo` trong phạm vi P3.
+- Time sync dùng midpoint local trước/sau request và chọn mẫu có round-trip time thấp nhất.
+- `exchangeInfo` chỉ được chuyển thành `SymbolRules` khi symbol ở trạng thái `TRADING`, contract là
+  `PERPETUAL`, quote/margin asset là USDT và có đủ `PRICE_FILTER`, `LOT_SIZE`, `MIN_NOTIONAL`.
+- Không dùng `pricePrecision`/`quantityPrecision` thay cho `tickSize`/`stepSize`.
+- Giá, quantity, funding rate và exchange filters từ JSON phải là chuỗi decimal và được parse thành
+  `Decimal`; binary float bị reject.
+- Aggregate trade xác định aggressor side từ cờ buyer-is-maker; mark price/funding và best bid/ask là
+  immutable typed events.
+- Aggregate trade/mark price dùng route `/market`; book ticker dùng `/public`; không trộn hai nhóm trên
+  cùng connection.
+- Client tự xử lý ping/pong, giới hạn inbound queue, phát hiện stale, reconnect với exponential backoff
+  và cung cấp health snapshot cho risk runtime tương lai.
+- Event time không được đi lùi trong cùng stream type; payload sai schema/symbol bị fail closed.
+- Public GET chỉ retry lỗi transport, `408`, `429` và `5xx` trong số lần hữu hạn; tôn trọng
+  `Retry-After` và không retry `418`.
+
+## Private Execution Adapter Contract — DRAFT
+
+- Interface async cho submit, cancel, query, account, commission và User Data Stream.
 - `client_order_id` là deterministic và unique theo strategy/level/side/cycle.
 - Timeout hoặc HTTP 503 trạng thái unknown phải query/reconcile trước khi retry.
 - User Data Stream là nguồn sự kiện thời gian thực; REST dùng để đối soát.

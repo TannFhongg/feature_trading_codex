@@ -6,14 +6,15 @@
 |---|---|---|
 | Secret committed | `PASS` | Không phát hiện secret được gán giá trị trong baseline |
 | `.env` ignored | `PASS` | `.gitignore` loại `.env` và `.env.*`, giữ `.env.example` |
-| Live trading | `DISABLED` | Chưa có runtime hoặc credential |
+| Live trading | `DISABLED` | P3 chỉ có public read-only adapter; chưa có runtime hoặc credential |
 | Withdrawal permission | `NOT_CONFIGURED` | API key chưa thuộc phạm vi repository |
-| Dependency manifest | `PASS` | P2 không thêm runtime dependency hoặc network client |
-| Dependency lock/scanning | `NOT_CONFIGURED` | Chưa có lockfile hoặc vulnerability scanner |
+| Dependency manifest | `PASS_P3` | HTTPX và websockets có bounded version ranges trong `pyproject.toml` |
+| Dependency lock/scanning | `NOT_CONFIGURED` | Chưa có lockfile hoặc vulnerability scanner; chặn service dài hạn |
 | CI security checks | `NOT_AVAILABLE` | Chưa có CI |
-| Numeric safety | `PASS_P2` | Domain, simulator, fee, funding và PnL từ chối float tại public inputs và dùng `Decimal` |
+| Numeric safety | `PASS_P3` | Domain/simulator và payload tài chính Binance dùng `Decimal`; market parser reject float |
+| Public adapter credentials | `PASS_P3` | REST/WebSocket P3 không nhận, ký, log hoặc gửi API key/secret |
 
-## Required Controls Before Testnet
+## Required Controls Before Authenticated Testnet Trading
 
 - API key Testnet tách biệt, không bao giờ commit.
 - Secret chỉ đọc từ environment hoặc secret manager.

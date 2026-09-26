@@ -6,9 +6,9 @@
 |---|---|
 | Cập nhật | 2026-09-26, Asia/Bangkok |
 | Branch | `main` |
-| Trạng thái tổng thể | `P2_COMPLETE` |
-| Phase hiện tại | Phase 2 — Simulator & Backtest Core (`COMPLETE`) |
-| Phase tiếp theo | Phase 3 — Binance Public Adapter (`PLANNED`, chưa bắt đầu) |
+| Trạng thái tổng thể | `P3_COMPLETE` |
+| Phase hiện tại | Phase 3 — Binance Public Adapter (`COMPLETE`) |
+| Phase tiếp theo | Phase 4 — Execution & Persistence (`PLANNED`, chưa bắt đầu) |
 | Release | Chưa publish/tag; package version `0.1.0` |
 | Runtime environment | Local development only; không có trading runtime |
 
@@ -30,15 +30,24 @@
   tính gross/net grid profit.
 - Thêm backtest report cho realized/unrealized/net PnL, drawdown, inventory, notional, fill ratio,
   funding/PnL ratio và profit per completed grid.
-- Nâng tổng số test lên 48 cases, gồm kịch bản partial fill, latency, queue, funding long/short,
-  fee allocation và drawdown.
+- Nâng bộ P2 lên 48 unit tests, gồm partial fill, latency, queue, funding long/short, fee allocation và
+  drawdown.
+- Thêm async Binance public REST adapter, mặc định dùng USDⓈ-M Futures Testnet và không dùng credential.
+- Parse `exchangeInfo` thành `SymbolRules` từ đúng filters; reject symbol không active USDT perpetual.
+- Đồng bộ server time theo midpoint/lowest RTT và retry public GET có giới hạn, `Retry-After`/`418`
+  aware.
+- Thêm typed aggregate trade, mark price/funding và best bid/ask events dùng `Decimal`.
+- Thêm routed WebSocket `/market` và `/public`, ping/pong, bounded queue, stale detection, reconnect
+  backoff, health snapshot và per-stream event ordering.
+- Nâng tổng số unit test lên 74 cases và thêm 3 public Testnet integration smoke tests.
 
 ## Chưa triển khai
 
-- Chưa có Binance adapter, live execution engine, database, API hoặc monitoring.
-- Chưa có market-data loader, order-book replay/queue calibration, margin/liquidation model hoặc
-  slippage model ngoài giả định fill ở resting limit price.
-- Chưa có integration test, CI/CD, deployment hoặc dependency lock/security scan.
+- Chưa có private Binance adapter, User Data Stream, live execution engine, database, API hoặc
+  monitoring.
+- Chưa có historical market-data loader, order-book replay/queue calibration, margin/liquidation model
+  hoặc slippage model ngoài giả định fill ở resting limit price.
+- Chưa có CI/CD, deployment, dependency lock hoặc vulnerability scan.
 - Chưa hỗ trợ Geometric, Long hoặc Short Grid.
 - Chưa có API credential trong repository và chưa kích hoạt live trading.
 
@@ -46,17 +55,24 @@
 
 - Báo cáo bàn giao chi tiết: [`P1_REPORT.md`](P1_REPORT.md).
 - Báo cáo P2: [`P2_REPORT.md`](P2_REPORT.md).
+- Báo cáo P3: [`P3_REPORT.md`](P3_REPORT.md).
 - Domain scaffold: commit `3fe45a0`.
 - Arithmetic Grid: commit `534ff4d`.
 - Simulator core: commit `45a9507`.
 - Backtest accounting/reporting: commit `5d55b36`.
-- `pytest`: 48 passed.
+- Public REST adapter: commit `af2e314`.
+- Public market streams: commit `942dcda`.
+- Unit tests: 74 passed.
+- Public Testnet integration: 3 passed trong 13.79 giây, không dùng credential.
+- Full `pytest` mặc định: 74 passed, 3 integration tests skipped.
+- Full `pytest` với Testnet enabled: 77 passed trong 14.67 giây.
 - `ruff check .`: passed; `ruff format --check .`: passed.
 - `mypy src`: passed ở strict mode.
-- Không phát hiện secret được gán giá trị trong phạm vi P2.
+- Không phát hiện secret được gán giá trị trong phạm vi P3; adapter public không nhận credential.
 
 ## Next Gate
 
-P2 đã đạt exit criteria. Công việc dừng tại phase boundary; P3 chỉ bắt đầu sau yêu cầu mới của chủ
-dự án. Trước khi dùng kết quả để ra quyết định giao dịch, P3+ phải bổ sung market-data ingestion và
-Testnet calibration; P2 không phải bằng chứng về hiệu quả trên thị trường thật.
+P3 đã đạt exit criteria cho exchange rules, time sync và public market WebSocket trên Testnet. Công
+việc dừng tại phase boundary; P4 chỉ bắt đầu sau yêu cầu mới của chủ dự án. Chưa có order execution,
+persistence, reconciliation hoặc risk runtime; P3 không cho phép giao dịch Testnet/live và không phải
+bằng chứng về hiệu quả trên thị trường thật.
