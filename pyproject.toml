@@ -9,9 +9,14 @@ description = "Safety-first Binance USD-M Futures grid trading bot"
 readme = "instruction.md"
 requires-python = ">=3.12"
 dependencies = [
+    "fastapi>=0.116,<1",
     "httpx>=0.28,<1",
+    "uvicorn>=0.35,<1",
     "websockets>=15,<17",
 ]
+
+[project.scripts]
+trading-bot = "trading_bot.cli:main"
 
 [project.optional-dependencies]
 dev = [

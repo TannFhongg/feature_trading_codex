@@ -10,8 +10,9 @@
 - `P3_REPORT.md`: báo cáo bàn giao chi tiết cho Phase 3 — Binance Public Adapter.
 - `P4_REPORT.md`: báo cáo bàn giao chi tiết cho Phase 4 — Execution & Persistence.
 - `P5_REPORT.md`: báo cáo bàn giao chi tiết cho Phase 5 — Risk & Recovery.
+- `P6_REPORT.md`: báo cáo bàn giao Application Runtime, Control API & Observability.
 - `PHASES.md`: các phase, điều kiện vào/ra và trạng thái.
-- `PLAN.md`: phạm vi công việc tiếp theo và Definition of Done.
+- `PLAN.md`: phạm vi/Definition of Done đã hoàn thành tới P6 và boundary cho P7 Testnet Soak.
 - `SCHEDULE.md`: thứ tự phụ thuộc và ước lượng thời gian.
 - `CONTRACTS.md`: hợp đồng domain, interface và safety invariant.
 - `SECURITY.md`: hiện trạng và gate bảo mật.

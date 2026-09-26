@@ -65,7 +65,69 @@ Mốc recovery/execution safety cũng đã hoàn thành:
 P5 đạt final gate với 144 tests mặc định trên cả Python 3.12/3.14, 28 focused risk/recovery tests,
 Ruff, format, mypy strict và pip check đều đạt. Chi tiết tại `P5_REPORT.md`.
 
+## P6 — Application Runtime, Control API & Observability: COMPLETE
+
+P6 đã ghép các component P1–P5 thành một ứng dụng async chạy được mà không tạo đường tắt quanh risk,
+ledger hoặc reconciliation. Chi tiết implementation và bằng chứng tại `P6_REPORT.md`.
+
+### Delivered Scope
+
+1. Tạo application entry point và composition root để nạp config, khởi tạo ledger, Binance adapters,
+   strategy, risk engine, reconciler, control API và observability.
+2. Tạo application orchestrator sở hữu lifecycle cùng toàn bộ async task. Startup phải validate cấu
+   hình, mở dependency, chạy recovery/reconciliation và dừng ở `PAUSED`; chỉ explicit healthy command
+   mới được chuyển sang `RUNNING`.
+3. Tạo strategy runtime loop nhận market/user events, duy trì runtime state, triển khai Neutral
+   Arithmetic Grid và tạo replacement intent từ confirmed fill/partial fill. Strategy runtime không
+   được gọi exchange hoặc persistence trực tiếp.
+4. Bắt buộc mọi intent tăng exposure đi qua P5 risk-managed executor và P4 durable execution
+   boundary. Control API không được có đường tắt tới private submit.
+5. Supervise stream, strategy, reconciliation và persistence tasks; bounded queue/backpressure, task
+   failure, stale data và resource failure phải fail closed, latch breaker khi phù hợp và không để
+   background task chết âm thầm.
+6. Cung cấp state-machine command idempotent cho status, start, pause, resume, stop và emergency stop;
+   định nghĩa rõ pause/stop policy đối với open orders và position.
+7. Shutdown theo thứ tự: ngừng tạo intent mới, áp dụng stop policy, chờ/cancel task có kiểm soát,
+   flush ledger rồi đóng stream, HTTP client và database.
+8. Bổ sung structured logs, health/readiness, metrics và alerts cho process death, stale stream,
+   reconciliation mismatch, risk/breaker, unknown order và khoảng cách liquidation; dữ liệu nhạy cảm
+   phải được redact.
+9. Control API mặc định chỉ bind local/private interface, có authentication/authorization cho command
+   thay đổi trạng thái và audit mọi command. API không được bật submission/live mode động.
+10. Thêm deterministic end-to-end tests bằng fakes cho startup/recovery, initial grid, fill→replacement,
+    pause/resume/stop, duplicate command/event, task crash, backpressure và graceful shutdown.
+
+### Definition of Done
+
+- Có executable application entry point, dry-run mode và cấu hình Testnet-first; order submission và
+  live trading vẫn tắt mặc định.
+- Một process có thể đi qua `STARTING → RECOVERING → PAUSED → RUNNING`, vận hành strategy loop và
+  dừng an toàn với deterministic fakes mà không bypass risk, ledger hoặc reconciliation.
+- Không tự resume sau restart; không tăng exposure khi stale, unreconciled, breaker latch hoặc runtime
+  dependency không healthy.
+- Control commands idempotent, được audit và tuân thủ state machine; observability chứng minh được
+  lifecycle, order, risk và recovery state mà không làm lộ secret/account payload.
+- Focused runtime/API tests, full pytest, Ruff, format, mypy strict và dependency check đều đạt; tài
+  liệu phase và báo cáo P6 được cập nhật cùng implementation.
+- Authenticated Testnet soak, fault injection dài hạn và live trading không thuộc P6; chúng vẫn là gate
+  P7/P8 riêng.
+
+### Verification Evidence
+
+- Executable `trading-bot`/`python -m trading_bot`, dry-run deterministic và composition root cho
+  Testnet/mainnet opt-in đã có; import package không tạo I/O.
+- Startup đi qua validate/recover và dừng ở `PAUSED`; resume explicit đối soát lại, kiểm tra snapshot
+  fresh/healthy rồi mới tạo initial grid qua P5/P4 boundaries.
+- Control API bearer-auth local/private, command ID durable/idempotent, runtime audit, structured log
+  redaction, health/readiness, Prometheus text metrics và alert sink đã có test.
+- 17 focused P6 tests bao phủ startup, initial grid, fill→replacement, partial fill, pause/resume/stop,
+  emergency stop, duplicate command/event, reconnect, task crash, backpressure, stale feed và shutdown.
+- Full suite đạt 161 passed, 3 public integration tests skipped theo thiết kế trên Python 3.12 và
+  Python 3.14; Ruff, format, mypy strict và pip check đạt.
+
 ## Phase Boundary
 
-P6 — Control API & Observability vẫn là `PLANNED/NOT_STARTED`. Order submission tiếp tục tắt theo mặc
-định; P5 không tự bật authenticated Testnet, Testnet soak hoặc live trading.
+P6 — Application Runtime, Control API & Observability đã `COMPLETE`. Repository ở `P6_COMPLETE` và
+checkpoint tiếp theo là P7 authenticated Testnet soak/fault injection sau khi hoàn tất credential,
+dependency-lock/scanning và deployment gates. Order submission/live trading vẫn tắt mặc định; hoàn
+thành P6 không tự cho phép Testnet soak hay mở P8 live canary.

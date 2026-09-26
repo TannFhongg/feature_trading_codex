@@ -6,9 +6,9 @@
 |---|---|
 | Cập nhật | 2026-09-26, Asia/Bangkok |
 | Branch | `main` |
-| Trạng thái tổng thể | `P5_COMPLETE` |
-| Phase hiện tại | Phase 5 — Risk & Recovery (`COMPLETE`) |
-| Phase tiếp theo | Phase 6 — Control API & Observability (`PLANNED`, chưa bắt đầu) |
+| Trạng thái tổng thể | `P6_COMPLETE` |
+| Phase hiện tại | Phase 6 — Application Runtime, Control API & Observability (`COMPLETE`) |
+| Phase tiếp theo | Phase 7 — Testnet Soak (`PLANNED`, chưa bắt đầu) |
 | Release | Chưa publish/tag; package version `0.1.0` |
 | Runtime environment | Local development; order submission và live trading tắt mặc định |
 
@@ -41,17 +41,26 @@
   query-before-retry cho kết quả mơ hồ và durable `UNKNOWN` outcome.
 - P5: SQLite lưu risk/emergency audit và forward-migrate P4 position/account tables để giữ mark,
   liquidation, notional và margin fields.
+- P6: executable/composition root, strict environment config, deterministic dry-run và Testnet-first
+  live composition; package import không tự tạo network/database side effect.
+- P6: supervised async orchestrator với startup recovery dừng ở `PAUSED`, explicit healthy resume,
+  bounded market/user queues, periodic reconciliation, stale watchdog và ordered shutdown.
+- P6: Neutral Grid runtime phục hồi cycle/ownership, phát initial intent cùng partial/full
+  fill→adjacent replacement mà không gọi exchange hoặc persistence trực tiếp.
+- P6: mọi strategy intent đi qua P5 risk-managed executor rồi P4 persist-before-network executor;
+  pause/stop hủy grid order và giữ position, emergency stop gọi P5 cancel-and-flatten.
+- P6: Control API local/private với bearer auth, durable idempotent command audit, health/readiness,
+  Prometheus text metrics, structured log redaction, alert sink và durable runtime failure evidence.
 - Cấu hình private mặc định tới USDⓈ-M Futures Testnet; order submission bị khóa mặc định. Mainnet
   submission cần bật riêng cả `order_submission_enabled` và `live_trading_enabled`.
 
 ## Chưa triển khai
 
-- Chưa có application entry point, strategy runtime loop, control API, metrics/alerts, CI/CD hoặc
-  deployment tooling.
+- Chưa có CI/CD, deployment tooling, external alert delivery hoặc distributed/HA runtime.
 - SQLite ledger hiện dành cho single-process/local runtime; chưa có PostgreSQL, migration framework,
   backup/restore hay high availability.
 - Chưa chạy authenticated private Testnet vì không có credential được cấp. Không có lệnh thật hoặc
-  Testnet order nào được gửi trong P4–P5.
+  Testnet order nào được gửi trong P4–P6.
 - Chưa có dependency lock, vulnerability scan, historical data loader, liquidation model hoặc
   calibrated order-book replay.
 - Chưa hỗ trợ Geometric, Long hoặc Short Grid; live trading vẫn bị khóa.
@@ -60,21 +69,25 @@
 
 - Báo cáo: [`P1_REPORT.md`](P1_REPORT.md), [`P2_REPORT.md`](P2_REPORT.md),
   [`P3_REPORT.md`](P3_REPORT.md), [`P4_REPORT.md`](P4_REPORT.md),
-  [`P5_REPORT.md`](P5_REPORT.md).
-- Unit/default suite: 144 passed, 3 public integration tests skipped theo thiết kế trên cả Python
-  3.12 và 3.14; chạy với development mode và warning-as-error.
+  [`P5_REPORT.md`](P5_REPORT.md), [`P6_REPORT.md`](P6_REPORT.md).
+- Unit/default suite: 161 passed, 3 public integration tests skipped theo thiết kế trên cả Python
+  3.12.10 và 3.14.0.
 - Public Testnet smoke: 3 passed trong 13.53 giây trên Python 3.12, không dùng credential.
 - P4 focused suite: 39 passed, gồm private REST, User Data Stream, ledger và reconciliation.
 - P5 risk/recovery focused suite: 28 passed, gồm limits, mode/leverage gates, breaker, restart, audit
   và emergency exit.
-- `ruff check .`: passed; `ruff format --check .`: 67 files formatted.
-- `mypy src`: passed ở strict mode trên 38 source files.
+- P6 focused runtime/API suite: 17 passed, gồm config/redaction, strategy replacement, runtime audit,
+  startup/recovery/reconnect, pause/resume/stop/emergency, duplicate command/event, crash/backpressure
+  và stale.
+- `ruff check .`: passed; `ruff format --check .`: 86 files checked.
+- `mypy src`: passed ở strict mode trên 51 source files.
 - `python -m pip check`: passed; no broken requirements.
-- P4–P5 private execution/risk boundaries được kiểm tra bằng deterministic fakes; không dùng
+- P4–P6 private execution/risk/runtime boundaries được kiểm tra bằng deterministic fakes; không dùng
   production account.
 
 ## Next Gate
 
-P5 đã đạt exit criteria cho limits, breaker, restart recovery và emergency exit. Repository dừng tại
-phase boundary; P6 chỉ bắt đầu theo yêu cầu mới. `P5_COMPLETE` không cho phép authenticated Testnet
-soak hoặc live trading; các gate bảo mật/deployment còn lại vẫn có hiệu lực.
+P6 đã đạt exit criteria bằng deterministic fakes và repository dừng tại phase boundary. P7 chỉ bắt
+đầu khi có credential Testnet được cấp an toàn, dependency lock/vulnerability scan, môi trường soak,
+alert delivery và phê duyệt rõ ràng. `P6_COMPLETE` không cho phép tự động chạy authenticated Testnet
+hoặc live trading; toàn bộ gate bảo mật/deployment và approval P8 vẫn có hiệu lực.

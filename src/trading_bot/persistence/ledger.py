@@ -8,7 +8,15 @@ from pathlib import Path
 from time import time_ns
 from typing import ParamSpec, TypeVar
 
-from trading_bot.domain import OrderSide
+from trading_bot.domain import (
+    CommandStatus,
+    ControlCommandRecord,
+    OrderSide,
+    RuntimeAuditEvent,
+    RuntimeCommand,
+    RuntimeEventType,
+    StrategyState,
+)
 from trading_bot.execution import (
     AccountSnapshot,
     AccountUpdate,
@@ -178,6 +186,28 @@ CREATE TABLE IF NOT EXISTS emergency_actions (
     exchange_order_id INTEGER,
     created_at_ms INTEGER NOT NULL,
     updated_at_ms INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS control_commands (
+    command_id TEXT PRIMARY KEY,
+    command TEXT NOT NULL,
+    actor TEXT NOT NULL,
+    status TEXT NOT NULL,
+    requested_at_ms INTEGER NOT NULL,
+    completed_at_ms INTEGER,
+    result_state TEXT,
+    detail_code TEXT
+);
+
+CREATE TABLE IF NOT EXISTS runtime_events (
+    event_id TEXT PRIMARY KEY,
+    event_type TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    outcome TEXT NOT NULL,
+    event_time_ms INTEGER NOT NULL,
+    state TEXT NOT NULL,
+    component TEXT,
+    reason_code TEXT
 );
 """
 
@@ -870,6 +900,30 @@ class SqliteExecutionLedger:
         ).fetchall()
         return tuple(self._order_from_row(row) for row in rows)
 
+    async def list_strategy_orders(
+        self,
+        symbol: str,
+        strategy_id: str,
+    ) -> tuple[OrderRecord, ...]:
+        """Return the complete order history needed to restore deterministic cycles."""
+
+        return await self._call(self._list_strategy_orders_sync, symbol, strategy_id)
+
+    def _list_strategy_orders_sync(
+        self,
+        symbol: str,
+        strategy_id: str,
+    ) -> tuple[OrderRecord, ...]:
+        rows = self._connection.execute(
+            """
+            SELECT * FROM orders
+            WHERE symbol = ? AND strategy_id = ?
+            ORDER BY created_at_ms, client_order_id
+            """,
+            (symbol, strategy_id),
+        ).fetchall()
+        return tuple(self._order_from_row(row) for row in rows)
+
     @staticmethod
     def _order_from_row(row: sqlite3.Row) -> OrderRecord:
         return OrderRecord(
@@ -1143,6 +1197,163 @@ class SqliteExecutionLedger:
         if row is None:
             raise LedgerError("failed to count exchange events")
         return int(row["total"])
+
+    async def begin_control_command(self, record: ControlCommandRecord) -> bool:
+        """Claim a command ID before executing any state-changing operation."""
+
+        if record.status is not CommandStatus.PENDING:
+            raise ValueError("new control command must be PENDING")
+        return await self._call(self._begin_control_command_sync, record)
+
+    def _begin_control_command_sync(self, record: ControlCommandRecord) -> bool:
+        cursor = self._connection.execute(
+            """
+            INSERT OR IGNORE INTO control_commands (
+                command_id, command, actor, status, requested_at_ms,
+                completed_at_ms, result_state, detail_code
+            ) VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL)
+            """,
+            (
+                record.command_id,
+                record.command.value,
+                record.actor,
+                record.status.value,
+                record.requested_at_ms,
+            ),
+        )
+        if cursor.rowcount == 1:
+            return True
+        existing = self._get_control_command_sync(record.command_id)
+        if existing is None:
+            raise LedgerError("control command disappeared during idempotency check")
+        if existing.command is not record.command or existing.actor != record.actor:
+            raise LedgerConflictError("command ID is already bound to different command data")
+        return False
+
+    async def complete_control_command(
+        self,
+        command_id: str,
+        status: CommandStatus,
+        result_state: StrategyState,
+        completed_at_ms: int,
+        *,
+        detail_code: str | None = None,
+    ) -> bool:
+        """Complete a claimed command without allowing a terminal result to change."""
+
+        if status is CommandStatus.PENDING:
+            raise ValueError("completed command status must be terminal")
+        return await self._call(
+            self._complete_control_command_sync,
+            command_id,
+            status,
+            result_state,
+            completed_at_ms,
+            detail_code,
+        )
+
+    def _complete_control_command_sync(
+        self,
+        command_id: str,
+        status: CommandStatus,
+        result_state: StrategyState,
+        completed_at_ms: int,
+        detail_code: str | None,
+    ) -> bool:
+        existing = self._get_control_command_sync(command_id)
+        if existing is None:
+            raise LedgerConflictError("control command must be claimed before completion")
+        if existing.status is not CommandStatus.PENDING:
+            if (
+                existing.status is status
+                and existing.result_state is result_state
+                and existing.detail_code == detail_code
+            ):
+                return False
+            raise LedgerConflictError("terminal control command result cannot change")
+        cursor = self._connection.execute(
+            """
+            UPDATE control_commands
+            SET status = ?, completed_at_ms = ?, result_state = ?, detail_code = ?
+            WHERE command_id = ? AND status = ?
+            """,
+            (
+                status.value,
+                completed_at_ms,
+                result_state.value,
+                detail_code,
+                command_id,
+                CommandStatus.PENDING.value,
+            ),
+        )
+        return cursor.rowcount == 1
+
+    async def get_control_command(self, command_id: str) -> ControlCommandRecord | None:
+        return await self._call(self._get_control_command_sync, command_id)
+
+    def _get_control_command_sync(self, command_id: str) -> ControlCommandRecord | None:
+        row = self._connection.execute(
+            "SELECT * FROM control_commands WHERE command_id = ?",
+            (command_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return ControlCommandRecord(
+            command_id=row["command_id"],
+            command=RuntimeCommand(row["command"]),
+            actor=row["actor"],
+            status=CommandStatus(row["status"]),
+            requested_at_ms=row["requested_at_ms"],
+            completed_at_ms=row["completed_at_ms"],
+            result_state=(
+                None if row["result_state"] is None else StrategyState(row["result_state"])
+            ),
+            detail_code=row["detail_code"],
+        )
+
+    async def record_runtime_event(self, event: RuntimeAuditEvent) -> bool:
+        return await self._call(self._record_runtime_event_sync, event)
+
+    def _record_runtime_event_sync(self, event: RuntimeAuditEvent) -> bool:
+        cursor = self._connection.execute(
+            """
+            INSERT OR IGNORE INTO runtime_events (
+                event_id, event_type, symbol, outcome, event_time_ms,
+                state, component, reason_code
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                event.event_id,
+                event.event_type.value,
+                event.symbol,
+                event.outcome,
+                event.event_time_ms,
+                event.state.value,
+                event.component,
+                event.reason_code,
+            ),
+        )
+        return cursor.rowcount == 1
+
+    async def list_runtime_events(self) -> tuple[RuntimeAuditEvent, ...]:
+        return await self._call(self._list_runtime_events_sync)
+
+    def _list_runtime_events_sync(self) -> tuple[RuntimeAuditEvent, ...]:
+        rows = self._connection.execute(
+            "SELECT * FROM runtime_events ORDER BY event_time_ms, event_id"
+        ).fetchall()
+        return tuple(
+            RuntimeAuditEvent(
+                event_type=RuntimeEventType(row["event_type"]),
+                symbol=row["symbol"],
+                outcome=row["outcome"],
+                event_time_ms=row["event_time_ms"],
+                state=StrategyState(row["state"]),
+                component=row["component"],
+                reason_code=row["reason_code"],
+            )
+            for row in rows
+        )
 
     async def _call(
         self,

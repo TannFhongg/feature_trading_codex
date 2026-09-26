@@ -15,6 +15,8 @@
 | R-011 | Binance đổi private/public endpoint hoặc payload | High | Strict parsers, route-specific tests, fake contracts, public Testnet smoke và review official docs | `PARTIAL_CONTROL_TESTED_P4` |
 | R-012 | SQLite hỏng/mất hoặc không phù hợp multi-process | High | WAL, transaction, reopen và P4→P5 forward-schema test; vẫn cần backup/restore và production datastore decision | `PARTIAL_CONTROL_TESTED_P5` |
 | R-013 | Local/exchange diverge sau restart | Critical | Audit ledger, reconciliation và restart coordinator chặn auto-resume cho tới explicit healthy reset | `CONTROL_TESTED_P5_FAKE` |
+| R-014 | Runtime task chết âm thầm hoặc lifecycle cạnh tranh tạo intent khi pause/stop | Critical | Orchestrator sở hữu task, execution lock, bounded queues, fail-closed breaker, durable runtime audit và ordered shutdown có deterministic tests | `CONTROL_TESTED_P6_FAKE` |
+| R-015 | Control API bị truy cập trái phép hoặc bypass trading safety gate | Critical | Local/private bind mặc định, constant-time bearer auth, durable idempotent command audit và không có config/submission endpoint | `CONTROL_TESTED_P6_FAKE` |
 
 ## Review Cadence
 

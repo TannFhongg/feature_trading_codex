@@ -85,11 +85,14 @@ class PersistentOrderExecutor:
         return order
 
     async def ingest_user_event(self, event: UserDataEvent) -> bool:
-        """Persist ledger-relevant user events and explicitly ignore typed notices."""
+        """Persist a new ledger-relevant event and report whether it was newly applied."""
 
         if isinstance(event, OrderTradeUpdate):
-            await self._ledger.apply_order_event(event)
-            return True
+            result = await self._ledger.apply_order_event(event)
+            duplicate = getattr(result, "duplicate_event", None)
+            if not isinstance(duplicate, bool):
+                raise TypeError("ledger order-event result must expose duplicate_event as bool")
+            return not duplicate
         if isinstance(event, AccountUpdate):
             return await self._ledger.apply_account_update(event)
         if isinstance(event, (ListenKeyExpired, UserStreamNotice)):

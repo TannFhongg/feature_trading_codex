@@ -1,8 +1,8 @@
 # Project Contracts
 
-Trạng thái tài liệu: `P5_IMPLEMENTED`. Domain, Strategy, Simulator/Backtest, Binance Public Adapter,
-Private Execution Adapter và Persistence/Reconciliation Contract đã có test. Pre-trade Risk Contract
-của P5 và runtime recovery/emergency contract đã đạt final gate.
+Trạng thái tài liệu: `P6_IMPLEMENTED`. Domain, Strategy, Simulator/Backtest, Binance adapters,
+Persistence/Reconciliation, Risk/Recovery và Application Runtime/Control contracts đều có
+deterministic test evidence.
 
 ## Domain Contract
 
@@ -110,6 +110,31 @@ của P5 và runtime recovery/emergency contract đã đạt final gate.
 - P4 SQLite file được forward-migrate để giữ mark/liquidation/notional/initial/maintenance margin; P5
   vẫn chưa cam kết multi-process HA, backup/restore hoặc migration framework tổng quát.
 - Duplicate/out-of-order exchange event không được tạo duplicate order hoặc fill.
+
+## Application Runtime & Control Contract — IMPLEMENTED P6
+
+- Application entry point/composition root là nơi duy nhất ghép config, ledger, adapters, strategy,
+  risk, reconciliation, control API và observability; import package không được tự tạo network hoặc
+  trading side effect.
+- Orchestrator sở hữu async task và resource lifecycle. Startup luôn validate, recover/reconcile rồi
+  dừng ở `PAUSED`; restart không được tự chuyển sang `RUNNING`.
+- Strategy runtime chỉ nhận typed market/user events và tạo order intent từ Neutral Arithmetic Grid
+  hoặc confirmed fill. Nó không được gọi private adapter hay ghi ledger trực tiếp.
+- Mọi intent tăng exposure phải đi qua P5 risk-managed executor và P4 persist-before-network boundary.
+  Pause, stale data, reconciliation mismatch, breaker hoặc dependency failure phải fail closed.
+- State transition và control command phải idempotent, được audit và tuân thủ state machine. Control
+  API không được bật `order_submission_enabled` hoặc `live_trading_enabled` trong runtime.
+- Task supervision, bounded queue/backpressure và ordered shutdown phải ngăn background failure âm
+  thầm, intent mới sau stop/pause và resource leak.
+- Health/readiness, structured logs, metrics và alerts phải phản ánh lifecycle, stream, reconciliation,
+  order và risk state nhưng không làm lộ credential, signature hoặc raw account payload.
+- Pause và normal stop hủy grid order nhưng giữ position; chỉ emergency stop mới gọi P5
+  persist-before-mutation cancel-and-flatten. Shutdown ngừng intent, áp dụng policy, drain/cancel task
+  rồi composition root mới đóng stream/HTTP/database.
+- Control API dùng bearer token so sánh constant-time; command ID được claim trong SQLite trước khi
+  đổi state và terminal result không thể bị ghi đè. API không có endpoint đổi cấu hình trading.
+- SQLite P6 bổ sung `control_commands` và `runtime_events`; số tài chính tiếp tục lưu dạng decimal text,
+  còn audit runtime chỉ lưu mã đã sanitize, không lưu raw exception/account payload.
 
 ## Contract Changes
 

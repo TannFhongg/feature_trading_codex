@@ -123,6 +123,21 @@ Tham khảo: [WebSocket Market Streams](https://developers.binance.com/docs/deri
 - Emergency cancel-and-flatten.
 - Audit log mọi thay đổi cấu hình.
 
+### 3.8. `application_runtime`
+
+- Cung cấp application entry point và composition root để khởi tạo config, ledger, adapters,
+  strategy, risk, reconciliation, control API và observability.
+- Application orchestrator sở hữu toàn bộ lifecycle và async task; startup luôn recovery/reconcile
+  trước rồi dừng ở `PAUSED`, không tự chuyển sang `RUNNING`.
+- Strategy runtime loop nhận market/user events, cập nhật state và tạo grid order intent hoặc lệnh đối
+  ứng sau confirmed fill; không được gọi exchange hoặc persistence trực tiếp.
+- Mọi intent làm tăng exposure phải đi qua risk-managed durable executor; không có đường tắt từ
+  control API hoặc strategy tới private adapter.
+- Task lỗi, queue quá tải, stale stream hoặc shutdown chưa hoàn tất phải fail closed, latch breaker
+  khi phù hợp và để lại audit evidence.
+- Shutdown có thứ tự: ngừng tạo intent mới, dừng/giám sát task, áp dụng stop policy, flush ledger và
+  đóng network/database resource.
+
 ### Stack gợi ý
 
 - Python async.
@@ -278,7 +293,7 @@ Tham khảo:
 | Grid engine | 5–7 ngày | Neutral arithmetic, partial fills và replacement |
 | Risk và recovery | 5–7 ngày | Limits, kill switch, reconciliation và restart safety |
 | Backtest/simulator | 4–6 ngày | Fee/funding/fill simulation và reports |
-| Control API/monitoring | 3–5 ngày | API, metrics và alert Telegram/Slack |
+| Application runtime, Control API/monitoring | 5–8 ngày | Entry point, orchestrator, strategy loop, API, metrics và alert Telegram/Slack |
 | Testnet soak | 7–14 ngày lịch | Chạy liên tục và fault injection |
 | Live canary | 3–7 ngày lịch | Vốn giới hạn cứng và theo dõi sát |
 
@@ -298,9 +313,12 @@ Tổng thời gian hợp lý cho một kỹ sư là khoảng **5–7 tuần phá
 
 ## 10. Bước triển khai tiếp theo
 
-1. Chốt đặc tả `GridConfig`.
-2. Chốt state machine và chính sách stop/pause.
-3. Thiết kế database schema.
-4. Liệt kê Binance API endpoint cần dùng.
-5. Dựng project skeleton và môi trường test.
-6. Xây simulator trước khi cho phép gửi lệnh thật.
+P1–P6 đã hoàn thành ở mức automated/deterministic evidence. Bước tiếp theo là chuẩn bị P7, không tự
+động bật submission hoặc live trading:
+
+1. Cấp credential Binance Futures Testnet riêng, xác minh withdrawal disabled và IP restriction.
+2. Tạo dependency lock, vulnerability scan và quyết định backup/restore cho SQLite trước soak.
+3. Cấu hình external process monitor cùng alert delivery và retention/redaction policy.
+4. Chốt runbook fault injection cho process kill, reconnect, REST timeout/503, clock drift và DB lỗi.
+5. Chạy authenticated Testnet soak 7–14 ngày, đối chiếu order/fill/position/PnL và lưu evidence.
+6. Chỉ xem xét P8 live canary sau khi P7 đạt gate và có phê duyệt/capital cap riêng.
