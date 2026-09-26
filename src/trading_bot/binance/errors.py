@@ -13,6 +13,10 @@ class BinanceTransportError(BinanceAdapterError):
     """Raised when a network transport cannot complete a request."""
 
 
+class BinanceStaleStreamError(BinanceTransportError):
+    """Raised when no market message arrives inside the configured stale window."""
+
+
 class BinanceHttpError(BinanceTransportError):
     """HTTP failure carrying retry metadata without exposing response secrets."""
 
