@@ -6,73 +6,63 @@
 |---|---|
 | Cập nhật | 2026-09-26, Asia/Bangkok |
 | Branch | `main` |
-| Trạng thái tổng thể | `P3_COMPLETE` |
-| Phase hiện tại | Phase 3 — Binance Public Adapter (`COMPLETE`) |
-| Phase tiếp theo | Phase 4 — Execution & Persistence (`PLANNED`, chưa bắt đầu) |
+| Trạng thái tổng thể | `P4_COMPLETE` |
+| Phase hiện tại | Phase 4 — Execution & Persistence (`COMPLETE`) |
+| Phase tiếp theo | Phase 5 — Risk & Recovery (`PLANNED`, chưa bắt đầu) |
 | Release | Chưa publish/tag; package version `0.1.0` |
-| Runtime environment | Local development only; không có trading runtime |
+| Runtime environment | Local development; order submission và live trading tắt mặc định |
 
 ## Đã hoàn thành
 
-- Khởi tạo Git repository trên nhánh `main` và cấu hình `origin`.
-- Thêm `.gitignore`, contributor guide và kế hoạch kỹ thuật.
-- Chốt phạm vi MVP sơ bộ: USDⓈ-M, Neutral Arithmetic Grid, Isolated Margin, One-way Mode và Testnet-first.
-- Tạo bộ báo cáo quản trị trong `status_prj/`.
-- Tạo Python scaffold, editable package và cấu hình pytest, Ruff, mypy.
-- Cài đặt immutable domain models dùng `Decimal` và typed lifecycle enums.
-- Cài đặt Neutral Arithmetic Grid calculator với tick/step quantization, anchor và exchange-filter validation.
-- Viết 27 unit tests cho domain invariants, rounding, sides, minQty và minNotional.
-- Thêm deterministic grid execution simulator với latency, queue-ahead, price priority và
-  market-volume allocation.
-- Mô phỏng partial fill và tạo replacement intent đúng theo quantity thực tế đã fill; giữ một
-  active logical order cho mỗi level/side.
-- Thêm one-way position accounting, maker/taker fee, funding cash flow và ghép entry/exit fill để
-  tính gross/net grid profit.
-- Thêm backtest report cho realized/unrealized/net PnL, drawdown, inventory, notional, fill ratio,
-  funding/PnL ratio và profit per completed grid.
-- Nâng bộ P2 lên 48 unit tests, gồm partial fill, latency, queue, funding long/short, fee allocation và
-  drawdown.
-- Thêm async Binance public REST adapter, mặc định dùng USDⓈ-M Futures Testnet và không dùng credential.
-- Parse `exchangeInfo` thành `SymbolRules` từ đúng filters; reject symbol không active USDT perpetual.
-- Đồng bộ server time theo midpoint/lowest RTT và retry public GET có giới hạn, `Retry-After`/`418`
-  aware.
-- Thêm typed aggregate trade, mark price/funding và best bid/ask events dùng `Decimal`.
-- Thêm routed WebSocket `/market` và `/public`, ping/pong, bounded queue, stale detection, reconnect
-  backoff, health snapshot và per-stream event ordering.
-- Nâng tổng số unit test lên 74 cases và thêm 3 public Testnet integration smoke tests.
+- P1: immutable domain models, Neutral Arithmetic Grid và exchange-filter quantization dùng
+  `Decimal`.
+- P2: deterministic simulator/backtester với partial fill, latency/queue, fee, funding, position và
+  PnL reporting.
+- P3: Testnet-first Binance public REST/WebSocket, exchange rules, clock sync, market events, stale
+  detection và reconnect.
+- P4: typed execution model với deterministic `client_order_id` tối đa 36 ký tự.
+- P4: async signed private REST cho order lifecycle, account, position, commission, income và
+  listen-key lifecycle; strict parser reject binary float cho dữ liệu tài chính.
+- P4: query-before-retry khi submit/cancel có kết quả mơ hồ; không blind retry và giữ `UNKNOWN` khi
+  không thể xác nhận trạng thái.
+- P4: User Data Stream với keepalive, ping/pong, bounded queue, reconnect, health snapshot và
+  out-of-order rejection.
+- P4: async SQLite ledger lưu order intent trước network, deduplicate exchange event/fill, bảo toàn
+  trạng thái `FILLED` trước late cancel và giữ cumulative quantity đơn điệu.
+- P4: reconciliation read-only cho open orders, missing orders, trades, positions, account và funding;
+  lưu audit report và chỉ cho `safe_to_resume` khi không còn mismatch.
+- Cấu hình private mặc định tới USDⓈ-M Futures Testnet; order submission bị khóa mặc định. Mainnet
+  submission cần bật riêng cả `order_submission_enabled` và `live_trading_enabled`.
 
 ## Chưa triển khai
 
-- Chưa có private Binance adapter, User Data Stream, live execution engine, database, API hoặc
-  monitoring.
-- Chưa có historical market-data loader, order-book replay/queue calibration, margin/liquidation model
-  hoặc slippage model ngoài giả định fill ở resting limit price.
-- Chưa có CI/CD, deployment, dependency lock hoặc vulnerability scan.
-- Chưa hỗ trợ Geometric, Long hoặc Short Grid.
-- Chưa có API credential trong repository và chưa kích hoạt live trading.
+- Chưa có risk engine, exposure/notional/daily-loss limits, stale-feed circuit breaker, restart
+  coordinator, kill switch hoặc reduce-only emergency exit; đây là P5.
+- Chưa có application entry point, strategy runtime loop, control API, metrics/alerts, CI/CD hoặc
+  deployment tooling.
+- SQLite ledger hiện dành cho single-process/local runtime; chưa có PostgreSQL, migration framework,
+  backup/restore hay high availability.
+- Chưa chạy authenticated private Testnet vì không có credential được cấp. Không có lệnh thật hoặc
+  Testnet order nào được gửi trong P4.
+- Chưa có dependency lock, vulnerability scan, historical data loader, liquidation model hoặc
+  calibrated order-book replay.
+- Chưa hỗ trợ Geometric, Long hoặc Short Grid; live trading vẫn bị khóa.
 
 ## Bằng chứng xác minh
 
-- Báo cáo bàn giao chi tiết: [`P1_REPORT.md`](P1_REPORT.md).
-- Báo cáo P2: [`P2_REPORT.md`](P2_REPORT.md).
-- Báo cáo P3: [`P3_REPORT.md`](P3_REPORT.md).
-- Domain scaffold: commit `3fe45a0`.
-- Arithmetic Grid: commit `534ff4d`.
-- Simulator core: commit `45a9507`.
-- Backtest accounting/reporting: commit `5d55b36`.
-- Public REST adapter: commit `af2e314`.
-- Public market streams: commit `942dcda`.
-- Unit tests: 74 passed.
-- Public Testnet integration: 3 passed trong 13.79 giây, không dùng credential.
-- Full `pytest` mặc định: 74 passed, 3 integration tests skipped.
-- Full `pytest` với Testnet enabled: 77 passed trong 14.67 giây.
-- `ruff check .`: passed; `ruff format --check .`: passed.
-- `mypy src`: passed ở strict mode.
-- Không phát hiện secret được gán giá trị trong phạm vi P3; adapter public không nhận credential.
+- Báo cáo: [`P1_REPORT.md`](P1_REPORT.md), [`P2_REPORT.md`](P2_REPORT.md),
+  [`P3_REPORT.md`](P3_REPORT.md), [`P4_REPORT.md`](P4_REPORT.md).
+- Unit/default suite: 108 passed, 3 public integration tests skipped theo thiết kế.
+- Public Testnet smoke: 3 passed trong 13.88 giây, không dùng credential.
+- P4 focused suite: 34 passed, gồm private REST, User Data Stream, ledger và reconciliation.
+- `ruff check .`: passed; `ruff format --check .`: 56 files formatted.
+- `mypy src`: passed ở strict mode trên 30 source files.
+- `python -m pip check`: passed; no broken requirements.
+- P4 private boundaries được kiểm tra bằng deterministic fakes; không dùng production account.
 
 ## Next Gate
 
-P3 đã đạt exit criteria cho exchange rules, time sync và public market WebSocket trên Testnet. Công
-việc dừng tại phase boundary; P4 chỉ bắt đầu sau yêu cầu mới của chủ dự án. Chưa có order execution,
-persistence, reconciliation hoặc risk runtime; P3 không cho phép giao dịch Testnet/live và không phải
-bằng chứng về hiệu quả trên thị trường thật.
+P4 đã đạt exit criteria cho order lifecycle, idempotent persistence và reconciliation. Repository dừng
+tại phase boundary. P5 chỉ bắt đầu theo yêu cầu mới và phải thêm risk/recovery controls trước khi có
+runtime gửi lệnh. Trạng thái `P4_COMPLETE` không phải bằng chứng về hiệu quả thị trường, không cho phép
+authenticated Testnet soak và tuyệt đối không cho phép live trading.

@@ -4,33 +4,39 @@
 
 | Control | Trạng thái | Bằng chứng/Ghi chú |
 |---|---|---|
-| Secret committed | `PASS` | Không phát hiện secret được gán giá trị trong baseline |
-| `.env` ignored | `PASS` | `.gitignore` loại `.env` và `.env.*`, giữ `.env.example` |
-| Live trading | `DISABLED` | P3 chỉ có public read-only adapter; chưa có runtime hoặc credential |
-| Withdrawal permission | `NOT_CONFIGURED` | API key chưa thuộc phạm vi repository |
-| Dependency manifest | `PASS_P3` | HTTPX và websockets có bounded version ranges trong `pyproject.toml` |
-| Dependency lock/scanning | `NOT_CONFIGURED` | Chưa có lockfile hoặc vulnerability scanner; chặn service dài hạn |
+| Secret committed | `PASS` | Không dùng credential thật; fixture chỉ có literal giả rõ ràng |
+| `.env` ignored | `PASS` | `.gitignore` loại `.env`/`.env.*`, giữ `.env.example` placeholder-only |
+| Testnet-first | `PASS_P4` | Private/public config mặc định tới USDⓈ-M Futures Testnet |
+| Order submission | `DISABLED_DEFAULT` | Cần explicit `order_submission_enabled`; chưa có runtime entry point |
+| Live trading | `DISABLED` | Mainnet submit cần thêm explicit `live_trading_enabled`; chưa được chạy |
+| Credential redaction | `PASS_P4` | Credential/config `repr` không lộ key/secret; transport error không chứa raw signed request |
+| Request signing | `PASS_P4` | HMAC-SHA256, time offset, bounded `recvWindow`, percent-encoded parameters |
+| Withdrawal permission | `NOT_CONFIGURED` | Không có API key thuộc phạm vi repository |
+| Dependency manifest | `PASS_P3` | HTTPX/websockets có bounded version ranges |
+| Dependency lock/scanning | `NOT_CONFIGURED` | Chưa có lockfile/vulnerability scanner; chặn service dài hạn |
 | CI security checks | `NOT_AVAILABLE` | Chưa có CI |
-| Numeric safety | `PASS_P3` | Domain/simulator và payload tài chính Binance dùng `Decimal`; market parser reject float |
-| Public adapter credentials | `PASS_P3` | REST/WebSocket P3 không nhận, ký, log hoặc gửi API key/secret |
+| Numeric safety | `PASS_P4` | Financial models/parsers dùng `Decimal`; binary float bị reject |
+| Persistence security | `LOCAL_ONLY` | SQLite không chứa credential; account/trading data vẫn phải được bảo vệ ở deployment |
 
-## Required Controls Before Authenticated Testnet Trading
+## Authenticated Testnet Gate
 
-- API key Testnet tách biệt, không bao giờ commit.
-- Secret chỉ đọc từ environment hoặc secret manager.
-- Log phải redact key, signature, header và account identifiers.
-- Request signing có clock synchronization và giới hạn `recvWindow`.
-- Dependency lock và vulnerability scan phải có trước khi chạy service dài hạn.
+Trước khi chạy private Testnet bằng tài khoản thật phải:
 
-## Required Controls Before Live Canary
+- Cấp API key Testnet riêng qua environment hoặc secret manager, tuyệt đối không commit.
+- Xác minh withdrawal bị tắt và áp dụng IP restriction nếu môi trường hỗ trợ.
+- Xác minh log/telemetry redact API key, signature, headers và account identifiers end-to-end.
+- Thêm P5 risk approval, stale-feed breaker, restart reconciliation gate và kill switch trước runtime
+  tự động gửi lệnh.
+- Có dependency lock và vulnerability scan trước long-running soak.
 
-- API key chỉ có quyền Futures cần thiết, không có withdrawal.
-- IP whitelist bắt buộc.
-- Live mode mặc định `false` và cần xác nhận rõ ràng khi bật.
-- Isolated Margin, leverage cap, notional cap và daily-loss cap được enforce.
-- Kill switch, stale-feed breaker, reconciliation và backup/restore đã được thử.
-- Không ghi raw user-data event chứa thông tin nhạy cảm nếu chưa redact.
+## Live Canary Gate
+
+- Hoàn thành P5–P7, bao gồm caps, daily-loss limit, emergency reduce-only exit, backup/restore và soak.
+- API key chỉ có quyền Futures cần thiết, không withdrawal, bắt buộc IP whitelist.
+- Live mode mặc định false và cần phê duyệt rõ ràng của chủ dự án; P7 không tự động mở P8.
+- Không ghi raw user-data/account event nhạy cảm nếu chưa có redaction và retention policy.
 
 ## Incident Rule
 
-Nếu nghi ngờ lộ secret: dừng service, revoke/rotate key, hủy open orders nếu an toàn, đối soát vị thế, lưu audit evidence đã redact và chỉ khởi động lại sau review.
+Nếu nghi ngờ lộ secret: dừng service, revoke/rotate key, hủy open orders nếu an toàn, đối soát vị thế,
+lưu audit evidence đã redact và chỉ khởi động lại sau review.

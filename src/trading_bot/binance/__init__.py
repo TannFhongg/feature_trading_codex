@@ -1,8 +1,11 @@
-"""Public Binance USD-M Futures integration; no trading operations are exposed."""
+"""Testnet-first Binance USD-M Futures public and authenticated integration."""
 
 from trading_bot.binance.errors import (
     BinanceAdapterError,
+    BinanceAmbiguousOrderError,
+    BinanceApiError,
     BinanceHttpError,
+    BinanceOrderSubmissionDisabledError,
     BinanceProtocolError,
     BinanceStaleStreamError,
     BinanceTransportError,
@@ -13,6 +16,8 @@ from trading_bot.binance.models import (
     TESTNET_REST_BASE_URL,
     TESTNET_WEBSOCKET_BASE_URL,
     AggregateTrade,
+    BinanceCredentials,
+    BinancePrivateConfig,
     BinancePublicConfig,
     BookTicker,
     MarketEvent,
@@ -21,13 +26,38 @@ from trading_bot.binance.models import (
     MarketStreamState,
     MarkPrice,
     TimeSync,
+    UserStreamHealth,
+    UserStreamState,
 )
 from trading_bot.binance.parsing import parse_market_message, parse_server_time, parse_symbol_rules
+from trading_bot.binance.private import (
+    BinancePrivateRestClient,
+    HttpxPrivateJsonTransport,
+    PrivateJsonTransport,
+    RequestParams,
+)
+from trading_bot.binance.private_parsing import (
+    parse_account_snapshot,
+    parse_account_trades,
+    parse_commission_rates,
+    parse_exchange_order,
+    parse_exchange_orders,
+    parse_income_records,
+    parse_listen_key,
+    parse_positions,
+    parse_user_data_message,
+)
 from trading_bot.binance.rest import BinancePublicRestClient, HttpxJsonTransport, JsonTransport
 from trading_bot.binance.stream import (
     BinanceMarketStream,
     MessageSource,
     WebsocketsMessageSource,
+)
+from trading_bot.binance.user_stream import (
+    BinanceUserDataStream,
+    PrivateWebsocketsMessageSource,
+    UserMessageSource,
+    UserStreamRestClient,
 )
 
 __all__ = [
@@ -37,15 +67,23 @@ __all__ = [
     "TESTNET_WEBSOCKET_BASE_URL",
     "AggregateTrade",
     "BinanceAdapterError",
+    "BinanceAmbiguousOrderError",
+    "BinanceApiError",
+    "BinanceCredentials",
     "BinanceHttpError",
     "BinanceMarketStream",
+    "BinanceOrderSubmissionDisabledError",
+    "BinancePrivateConfig",
+    "BinancePrivateRestClient",
     "BinanceProtocolError",
     "BinancePublicConfig",
     "BinancePublicRestClient",
     "BinanceStaleStreamError",
     "BinanceTransportError",
+    "BinanceUserDataStream",
     "BookTicker",
     "HttpxJsonTransport",
+    "HttpxPrivateJsonTransport",
     "JsonTransport",
     "MarkPrice",
     "MarketEvent",
@@ -53,9 +91,25 @@ __all__ = [
     "MarketStreamKind",
     "MarketStreamState",
     "MessageSource",
+    "PrivateJsonTransport",
+    "PrivateWebsocketsMessageSource",
+    "RequestParams",
     "TimeSync",
+    "UserMessageSource",
+    "UserStreamHealth",
+    "UserStreamRestClient",
+    "UserStreamState",
     "WebsocketsMessageSource",
+    "parse_account_snapshot",
+    "parse_account_trades",
+    "parse_commission_rates",
+    "parse_exchange_order",
+    "parse_exchange_orders",
+    "parse_income_records",
+    "parse_listen_key",
     "parse_market_message",
+    "parse_positions",
     "parse_server_time",
     "parse_symbol_rules",
+    "parse_user_data_message",
 ]

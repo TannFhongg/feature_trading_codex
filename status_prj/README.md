@@ -8,6 +8,7 @@
 - `P1_REPORT.md`: báo cáo bàn giao chi tiết cho Phase 1 — Domain Foundation.
 - `P2_REPORT.md`: báo cáo bàn giao chi tiết cho Phase 2 — Simulator & Backtest Core.
 - `P3_REPORT.md`: báo cáo bàn giao chi tiết cho Phase 3 — Binance Public Adapter.
+- `P4_REPORT.md`: báo cáo bàn giao chi tiết cho Phase 4 — Execution & Persistence.
 - `PHASES.md`: các phase, điều kiện vào/ra và trạng thái.
 - `PLAN.md`: phạm vi công việc tiếp theo và Definition of Done.
 - `SCHEDULE.md`: thứ tự phụ thuộc và ước lượng thời gian.

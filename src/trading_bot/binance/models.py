@@ -1,6 +1,6 @@
 """Immutable configuration and clock records for the Binance public adapter."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from enum import StrEnum
 from math import isfinite
@@ -114,6 +114,17 @@ class MarketStreamState(StrEnum):
     STOPPED = "STOPPED"
 
 
+class UserStreamState(StrEnum):
+    """Observable lifecycle state for the authenticated User Data Stream."""
+
+    IDLE = "IDLE"
+    CONNECTING = "CONNECTING"
+    LIVE = "LIVE"
+    RECONNECTING = "RECONNECTING"
+    FAILED = "FAILED"
+    STOPPED = "STOPPED"
+
+
 @dataclass(frozen=True, slots=True)
 class BinancePublicConfig:
     """Testnet-first endpoints and bounded retry settings for public market data."""
@@ -163,6 +174,107 @@ class BinancePublicConfig:
         """Build an explicit read-only mainnet public-data configuration."""
 
         values: dict[str, object] = {
+            "rest_base_url": MAINNET_REST_BASE_URL,
+            "websocket_base_url": MAINNET_WEBSOCKET_BASE_URL,
+        }
+        values.update(overrides)
+        return cls(**values)  # type: ignore[arg-type]
+
+
+@dataclass(frozen=True, slots=True)
+class BinanceCredentials:
+    """In-memory credentials whose representation never exposes either secret value."""
+
+    api_key: str = field(repr=False)
+    api_secret: str = field(repr=False)
+
+    def __post_init__(self) -> None:
+        for name, value in (("api_key", self.api_key), ("api_secret", self.api_secret)):
+            if not isinstance(value, str):
+                raise TypeError(f"{name} must be str")
+            if not value or value != value.strip():
+                raise DomainValidationError(f"{name} must be non-empty and trimmed")
+
+
+@dataclass(frozen=True, slots=True)
+class BinancePrivateConfig:
+    """Testnet-first authenticated REST and User Data Stream configuration."""
+
+    credentials: BinanceCredentials = field(repr=False)
+    rest_base_url: str = TESTNET_REST_BASE_URL
+    websocket_base_url: str = TESTNET_WEBSOCKET_BASE_URL
+    request_timeout_seconds: float = 10.0
+    recv_window_ms: int = 5_000
+    ambiguous_request_max_attempts: int = 2
+    ambiguous_retry_delay_seconds: float = 0.1
+    websocket_open_timeout_seconds: float = 10.0
+    websocket_ping_interval_seconds: float = 120.0
+    websocket_ping_timeout_seconds: float = 30.0
+    websocket_max_queue: int = 64
+    user_stream_keepalive_seconds: float = 30 * 60.0
+    reconnect_initial_seconds: float = 0.25
+    reconnect_max_seconds: float = 10.0
+    max_reconnect_attempts: int | None = None
+    order_submission_enabled: bool = False
+    live_trading_enabled: bool = False
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.credentials, BinanceCredentials):
+            raise TypeError("credentials must be BinanceCredentials")
+        _validate_base_url("rest_base_url", self.rest_base_url, "https")
+        _validate_base_url("websocket_base_url", self.websocket_base_url, "wss")
+        _require_positive_finite("request_timeout_seconds", self.request_timeout_seconds)
+        recv_window_ms = _require_positive_int("recv_window_ms", self.recv_window_ms)
+        if recv_window_ms > 60_000:
+            raise DomainValidationError("recv_window_ms must not exceed 60000")
+        _require_positive_int("ambiguous_request_max_attempts", self.ambiguous_request_max_attempts)
+        _require_positive_finite(
+            "ambiguous_retry_delay_seconds", self.ambiguous_retry_delay_seconds
+        )
+        _require_positive_finite(
+            "websocket_open_timeout_seconds", self.websocket_open_timeout_seconds
+        )
+        _require_positive_finite(
+            "websocket_ping_interval_seconds", self.websocket_ping_interval_seconds
+        )
+        _require_positive_finite(
+            "websocket_ping_timeout_seconds", self.websocket_ping_timeout_seconds
+        )
+        _require_positive_int("websocket_max_queue", self.websocket_max_queue)
+        _require_positive_finite(
+            "user_stream_keepalive_seconds", self.user_stream_keepalive_seconds
+        )
+        _require_positive_finite("reconnect_initial_seconds", self.reconnect_initial_seconds)
+        _require_positive_finite("reconnect_max_seconds", self.reconnect_max_seconds)
+        if self.reconnect_max_seconds < self.reconnect_initial_seconds:
+            raise DomainValidationError(
+                "reconnect_max_seconds must be greater than or equal to reconnect_initial_seconds"
+            )
+        if self.max_reconnect_attempts is not None:
+            _require_non_negative_int("max_reconnect_attempts", self.max_reconnect_attempts)
+        if not isinstance(self.order_submission_enabled, bool):
+            raise TypeError("order_submission_enabled must be bool")
+        if not isinstance(self.live_trading_enabled, bool):
+            raise TypeError("live_trading_enabled must be bool")
+        if (
+            self.rest_base_url == MAINNET_REST_BASE_URL
+            and self.order_submission_enabled
+            and not self.live_trading_enabled
+        ):
+            raise DomainValidationError(
+                "mainnet order submission requires explicit live_trading_enabled"
+            )
+
+    @classmethod
+    def mainnet(
+        cls,
+        credentials: BinanceCredentials,
+        **overrides: object,
+    ) -> "BinancePrivateConfig":
+        """Build an authenticated mainnet configuration; trading remains locked by default."""
+
+        values: dict[str, object] = {
+            "credentials": credentials,
             "rest_base_url": MAINNET_REST_BASE_URL,
             "websocket_base_url": MAINNET_WEBSOCKET_BASE_URL,
         }
@@ -292,4 +404,24 @@ class MarketStreamHealth:
             raise TypeError("stale must be bool")
         if self.last_message_monotonic_ms is not None:
             _require_non_negative_int("last_message_monotonic_ms", self.last_message_monotonic_ms)
+        _require_non_negative_int("reconnect_count", self.reconnect_count)
+
+
+@dataclass(frozen=True, slots=True)
+class UserStreamHealth:
+    """Secret-free authenticated stream health snapshot for later risk controls."""
+
+    state: UserStreamState
+    listen_key_active: bool
+    last_event_monotonic_ms: int | None
+    reconnect_count: int
+    last_error: str | None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.state, UserStreamState):
+            raise TypeError("state must be UserStreamState")
+        if not isinstance(self.listen_key_active, bool):
+            raise TypeError("listen_key_active must be bool")
+        if self.last_event_monotonic_ms is not None:
+            _require_non_negative_int("last_event_monotonic_ms", self.last_event_monotonic_ms)
         _require_non_negative_int("reconnect_count", self.reconnect_count)

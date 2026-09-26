@@ -2,52 +2,46 @@
 
 ## P1 — Domain Foundation: COMPLETE
 
-Đã bàn giao:
-
-1. `pyproject.toml`, package `src/trading_bot/` và local editable environment.
-2. Cấu hình pytest, Ruff, mypy và `.env.example` an toàn.
-3. `GridConfig`, `SymbolRules`, `GridLevel`, `GridPlan` và lifecycle enums.
-4. Arithmetic Grid calculator chỉ dùng `Decimal`.
-5. Tick/step quantization, minQty/minNotional và symbol validation.
-6. Neutral BUY/SELL assignment với đúng một inactive anchor level.
-7. 27 unit tests; toàn bộ quality gates đạt.
+Đã bàn giao Python scaffold, immutable domain models dùng `Decimal`, Neutral Arithmetic Grid,
+exchange-filter quantization và 27 unit tests.
 
 ## P2 — Simulator & Backtest Core: COMPLETE
 
-Đã bàn giao:
-
-1. Typed market trade, funding event, order intent, fill và report records chỉ dùng `Decimal`.
-2. Deterministic resting-order simulator với aggressor side, price priority và volume allocation.
-3. Configurable latency và conservative queue-ahead; replacement không fill trên event tạo nó.
-4. Partial-fill replacement đúng filled quantity và logical-order aggregation theo level/side.
-5. One-way position ledger cho long, short, close và position flip.
-6. Maker/taker fee, funding payment và entry/exit fee allocation cho completed grid trade.
-7. Báo cáo PnL, grid profit, drawdown, inventory, notional, fill ratio và funding/PnL ratio.
-8. 48 unit-test cases; pytest, Ruff, mypy strict và pip check đều đạt.
+Đã bàn giao deterministic simulator, latency/queue/partial-fill model, position accounting,
+maker/taker fee, funding, PnL/drawdown reporting và 48 unit-test cases.
 
 ## P3 — Binance Public Adapter: COMPLETE
 
+Đã bàn giao Testnet-first public REST/WebSocket, exchange rules, server-time sync, strict Decimal
+parsing, bounded retry, routed market streams, stale detection và public Testnet smoke tests.
+
+## P4 — Execution & Persistence: COMPLETE
+
 Đã bàn giao:
 
-1. Async public REST client, mặc định dùng USDⓈ-M Futures Testnet và không nhận credential.
-2. Strict parser cho `exchangeInfo`, chỉ chấp nhận active USDT perpetual và lấy đúng `tickSize`,
-   `stepSize`, `minQty`, `notional` từ filters.
-3. Server-time synchronization theo midpoint, chọn mẫu có round-trip time thấp nhất.
-4. Retry có giới hạn cho public GET, exponential backoff, tôn trọng `Retry-After` và không retry khi
-   Binance trả `418`.
-5. Typed WebSocket events dùng `Decimal` cho aggregate trade, mark price/funding và best bid/ask.
-6. Route split hiện hành: aggregate trade/mark price qua `/market`, book ticker qua `/public`.
-7. Automatic ping/pong, bounded queue, stale detection, reconnect backoff và health snapshot.
-8. Reject event đi lùi theo từng stream type; stream Public và Market chạy trên connection riêng.
-9. 74 unit tests và 3 public Testnet integration tests; toàn bộ quality gates đạt.
+1. Immutable execution records và deterministic `client_order_id` theo
+   strategy/level/side/cycle, giới hạn đúng 36 ký tự.
+2. Async signed REST adapter cho submit, cancel, query, open orders, account trades, positions,
+   account, commission, funding income và listen-key lifecycle.
+3. Testnet-first configuration; order submission bị khóa mặc định và mainnet cần hai opt-in riêng
+   cho submission/live trading.
+4. Query-before-retry cho submit/cancel khi timeout hoặc HTTP 503; trạng thái không thể xác định được
+   giữ là `UNKNOWN` để đối soát, không gửi mù.
+5. User Data Stream có keepalive, ping/pong, bounded queue, reconnect, health snapshot và kiểm tra
+   event ordering.
+6. Async SQLite execution ledger lưu intent trước network, order/fill/event/account/position/income và
+   reconciliation audit; duplicate event/fill bị loại bằng unique business keys.
+7. Cancel/fill race không được làm lùi order đã `FILLED`; cumulative executed quantity không giảm.
+8. Read-only reconciliation đối chiếu open order, query order bị thiếu, fills, positions, account và
+   funding; chỉ `safe_to_resume` khi không còn orphan/unresolved/quantity/position mismatch.
+9. 108 tests mặc định đạt, 3 public Testnet smoke tests đạt; Ruff, mypy strict và pip check đạt.
+
+Private authenticated Testnet chưa chạy vì repository không có credential và không được phép suy diễn
+quyền sử dụng tài khoản. Các boundary riêng tư được kiểm tra bằng deterministic fakes theo chính sách
+Testnet-or-fake. P4 không bổ sung strategy loop, risk approval, emergency exit hay control API.
 
 ## Phase Boundary
 
-P3 đã hoàn thành. P4 — Execution & Persistence vẫn là `PLANNED/NOT_STARTED`; chưa có signed REST,
-User Data Stream, submit/cancel order, database, event ledger hoặc reconciliation. Cần yêu cầu mới của
-chủ dự án trước khi bắt đầu P4.
-
-## P4 Preview — Chưa triển khai
-
-P4 dự kiến bổ sung deterministic client order ID, private order/user-data adapter, idempotent event
-ledger, persistence và reconciliation. Preview này không cho phép gửi lệnh hoặc dùng credential.
+P4 đã hoàn thành. P5 — Risk & Recovery vẫn là `PLANNED/NOT_STARTED`. Chưa có risk engine, exposure
+limits, stale-feed circuit breaker, restart coordinator, kill switch hoặc reduce-only emergency exit.
+Order submission vẫn tắt theo mặc định và việc hoàn thành P4 không cho phép live trading.
