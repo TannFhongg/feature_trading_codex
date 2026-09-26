@@ -12,8 +12,9 @@ This repository is currently in the planning stage; `instruction.md` is the sour
 - `src/trading_bot/api/`: control API and health endpoints.
 - `tests/unit/` and `tests/integration/`: isolated and exchange-facing tests.
 - `migrations/`: database migrations; `config/`: non-secret configuration examples.
+- `status_prj/`: current phase, plan, schedule, contracts, risks, and security status.
 
-Keep exchange-specific code out of strategy modules. Treat persisted orders, fills, and risk events as auditable records.
+Keep exchange-specific code out of strategy modules. Treat persisted orders, fills, and risk events as auditable records. Update relevant `status_prj/` reports in the same commit as a phase or scope change.
 
 ## Build, Test, and Development Commands
 
@@ -41,7 +42,7 @@ Use pytest and name files `test_<behavior>.py`. Cover grid rounding, partial fil
 
 ## Commit & Pull Request Guidelines
 
-No Git history exists yet. Use Conventional Commits, such as `feat(strategy): add arithmetic grid` or `fix(execution): reconcile unknown order status`. Keep commits scoped and independently testable.
+Use Conventional Commits, such as `feat(strategy): add arithmetic grid` or `fix(execution): reconcile unknown order status`. Keep commits scoped and independently testable.
 
 Pull requests must describe behavior changes, trading/risk impact, tests performed, and configuration or migration changes. Link relevant issues and include API examples when endpoints change.
 
