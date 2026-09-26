@@ -94,6 +94,7 @@ class OrderIntent:
     quantity: Decimal
     role: IntentRole
     opening_price: Decimal | None = None
+    opening_fill_id: str | None = None
 
     def __post_init__(self) -> None:
         if not self.intent_id:
@@ -111,8 +112,10 @@ class OrderIntent:
             raise TypeError("role must be IntentRole")
         if self.role is IntentRole.EXIT:
             _require_decimal("opening_price", self.opening_price, positive=True)
-        elif self.opening_price is not None:
-            raise DomainValidationError("ENTRY intent must not have opening_price")
+            if not self.opening_fill_id:
+                raise DomainValidationError("EXIT intent must have opening_fill_id")
+        elif self.opening_price is not None or self.opening_fill_id is not None:
+            raise DomainValidationError("ENTRY intent must not have opening fill data")
 
 
 @dataclass(frozen=True, slots=True)
@@ -129,6 +132,7 @@ class SimulatedFill:
     liquidity: Liquidity
     role: IntentRole
     opening_price: Decimal | None
+    opening_fill_id: str | None
     gross_grid_profit: Decimal
 
     def __post_init__(self) -> None:
@@ -147,8 +151,10 @@ class SimulatedFill:
         _require_decimal("gross_grid_profit", self.gross_grid_profit, non_negative=True)
         if self.role is IntentRole.EXIT:
             _require_decimal("opening_price", self.opening_price, positive=True)
-        elif self.opening_price is not None:
-            raise DomainValidationError("ENTRY fill must not have opening_price")
+            if not self.opening_fill_id:
+                raise DomainValidationError("EXIT fill must have opening_fill_id")
+        elif self.opening_price is not None or self.opening_fill_id is not None:
+            raise DomainValidationError("ENTRY fill must not have opening fill data")
 
 
 @dataclass(frozen=True, slots=True)

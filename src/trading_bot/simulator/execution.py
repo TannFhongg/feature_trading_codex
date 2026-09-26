@@ -45,6 +45,7 @@ class GridExecutionSimulator:
                     quantity=self._plan.quantity_per_order,
                     role=IntentRole.ENTRY,
                     opening_price=None,
+                    opening_fill_id=None,
                 )
 
     @property
@@ -152,6 +153,7 @@ class GridExecutionSimulator:
         quantity: Decimal,
         role: IntentRole,
         opening_price: Decimal | None,
+        opening_fill_id: str | None,
     ) -> OrderIntent:
         self._intent_sequence += 1
         level = self._plan.levels[level_index]
@@ -165,6 +167,7 @@ class GridExecutionSimulator:
             quantity=quantity,
             role=role,
             opening_price=opening_price,
+            opening_fill_id=opening_fill_id,
         )
         self._intents.append(intent)
         self._orders[(level_index, side)].append(
@@ -178,10 +181,11 @@ class GridExecutionSimulator:
 
     def _record_fill(self, trade: MarketTrade, intent: OrderIntent, quantity: Decimal) -> None:
         self._fill_sequence += 1
+        fill_id = f"fill-{self._fill_sequence:08d}"
         gross_grid_profit = self._grid_profit(intent, quantity)
         self._fills.append(
             SimulatedFill(
-                fill_id=f"fill-{self._fill_sequence:08d}",
+                fill_id=fill_id,
                 intent_id=intent.intent_id,
                 event_time_ms=trade.event_time_ms,
                 level_index=intent.level_index,
@@ -191,6 +195,7 @@ class GridExecutionSimulator:
                 liquidity=trade.liquidity,
                 role=intent.role,
                 opening_price=intent.opening_price,
+                opening_fill_id=intent.opening_fill_id,
                 gross_grid_profit=gross_grid_profit,
             )
         )
@@ -212,6 +217,7 @@ class GridExecutionSimulator:
             quantity=quantity,
             role=replacement_role,
             opening_price=intent.price if replacement_role is IntentRole.EXIT else None,
+            opening_fill_id=fill_id if replacement_role is IntentRole.EXIT else None,
         )
 
     @staticmethod
