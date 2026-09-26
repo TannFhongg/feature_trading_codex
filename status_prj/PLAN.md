@@ -41,8 +41,16 @@ Private authenticated Testnet chưa chạy vì repository không có credential 
 quyền sử dụng tài khoản. Các boundary riêng tư được kiểm tra bằng deterministic fakes theo chính sách
 Testnet-or-fake. P4 không bổ sung strategy loop, risk approval, emergency exit hay control API.
 
-## Phase Boundary
+## P5 — Risk & Recovery: IN PROGRESS
 
-P4 đã hoàn thành. P5 — Risk & Recovery vẫn là `PLANNED/NOT_STARTED`. Chưa có risk engine, exposure
-limits, stale-feed circuit breaker, restart coordinator, kill switch hoặc reduce-only emergency exit.
-Order submission vẫn tắt theo mặc định và việc hoàn thành P4 không cho phép live trading.
+Đã hoàn thành mốc risk domain/engine đầu tiên:
+
+1. Immutable `RiskLimits`, `RuntimeRiskSnapshot`, decision/violation records dùng `Decimal`.
+2. Pre-trade approval cho position quantity, position/open-order notional và open-order count.
+3. Runtime gates cho strategy state, reconciliation, stale market/user data và emergency latch.
+4. Loss, drawdown, funding, margin ratio, liquidation distance cùng soft/hard price boundaries.
+5. Exit `reduceOnly` chỉ được phép khi giảm nghiêm ngặt vị thế hiện tại và không cross qua zero.
+
+Các mốc còn lại của P5 là breaker có latch, restart recovery coordinator, risk-aware executor,
+emergency cancel-and-flatten, audit persistence và full quality gate. Order submission vẫn tắt theo
+mặc định; P5 không tự bật Testnet hay live trading.

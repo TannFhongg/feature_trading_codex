@@ -1,8 +1,8 @@
 # Project Contracts
 
-Trạng thái tài liệu: `P4_IMPLEMENTED`. Domain, Strategy, Simulator/Backtest, Binance Public Adapter,
-Private Execution Adapter và Persistence/Reconciliation Contract đã có test. Runtime Safety Invariants
-của P5 vẫn là `DRAFT`.
+Trạng thái tài liệu: `P5_IN_PROGRESS`. Domain, Strategy, Simulator/Backtest, Binance Public Adapter,
+Private Execution Adapter và Persistence/Reconciliation Contract đã có test. Pre-trade Risk Contract
+của P5 đã được triển khai; recovery/emergency invariants vẫn đang hoàn thiện.
 
 ## Domain Contract
 
@@ -79,10 +79,20 @@ của P5 vẫn là `DRAFT`.
 - Ledger tồn tại qua close/reopen. P4 chưa cam kết multi-process HA, schema migration framework,
   backup/restore hoặc PostgreSQL.
 
-## Runtime Safety Invariants — DRAFT P5
+## Pre-trade Risk Contract — IMPLEMENTED P5
 
-- Không tăng exposure khi market/user data stale hoặc reconciliation chưa hoàn tất.
-- Risk engine duyệt mọi execution intent trước submit.
+- Mọi giá trị tài chính trong policy/snapshot/decision dùng `Decimal`; binary float bị reject.
+- Lệnh thường được xem là có khả năng tăng exposure và chỉ được duyệt khi strategy `RUNNING`, market
+  và user data còn fresh, reconciliation an toàn và emergency stop chưa latch.
+- Position quantity, tổng position/open-order notional và số open order được kiểm tra trước submit.
+- Daily loss, drawdown, funding rate, maintenance-margin ratio, liquidation distance và price boundary
+  đều có giới hạn fail-closed; hard breach yêu cầu emergency stop.
+- `reduceOnly` chỉ bypass entry gates khi side/quantity thực sự giảm vị thế one-way hiện tại mà không
+  cross qua zero; request sai bị reject.
+
+## Runtime Recovery Invariants — IN PROGRESS P5
+
+- Risk engine phải được nối vào executor trước mọi normal submit.
 - Emergency exit chỉ giảm exposure bằng `reduceOnly`.
 - Restart phải reconcile database với Binance trước khi resume.
 - Duplicate/out-of-order event không được tạo duplicate order hoặc fill.

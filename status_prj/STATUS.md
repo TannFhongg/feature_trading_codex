@@ -6,9 +6,9 @@
 |---|---|
 | Cập nhật | 2026-09-26, Asia/Bangkok |
 | Branch | `main` |
-| Trạng thái tổng thể | `P4_COMPLETE` |
-| Phase hiện tại | Phase 4 — Execution & Persistence (`COMPLETE`) |
-| Phase tiếp theo | Phase 5 — Risk & Recovery (`PLANNED`, chưa bắt đầu) |
+| Trạng thái tổng thể | `P5_IN_PROGRESS` |
+| Phase hiện tại | Phase 5 — Risk & Recovery (`IN_PROGRESS`) |
+| Phase tiếp theo | Phase 6 — Control API & Observability (`PLANNED`, chưa bắt đầu) |
 | Release | Chưa publish/tag; package version `0.1.0` |
 | Runtime environment | Local development; order submission và live trading tắt mặc định |
 
@@ -31,13 +31,16 @@
   trạng thái `FILLED` trước late cancel và giữ cumulative quantity đơn điệu.
 - P4: reconciliation read-only cho open orders, missing orders, trades, positions, account và funding;
   lưu audit report và chỉ cho `safe_to_resume` khi không còn mismatch.
+- P5: deterministic pre-trade risk engine với position/notional/open-order caps, loss/drawdown/funding,
+  margin/liquidation, stale/reconciliation gates và soft/hard price boundaries.
+- P5: `reduceOnly` exit chỉ được duyệt khi thực sự giảm vị thế one-way mà không cross qua zero.
 - Cấu hình private mặc định tới USDⓈ-M Futures Testnet; order submission bị khóa mặc định. Mainnet
   submission cần bật riêng cả `order_submission_enabled` và `live_trading_enabled`.
 
 ## Chưa triển khai
 
-- Chưa có risk engine, exposure/notional/daily-loss limits, stale-feed circuit breaker, restart
-  coordinator, kill switch hoặc reduce-only emergency exit; đây là P5.
+- P5 chưa hoàn tất breaker có latch, restart coordinator, risk-aware executor, emergency
+  cancel-and-flatten và risk-event persistence.
 - Chưa có application entry point, strategy runtime loop, control API, metrics/alerts, CI/CD hoặc
   deployment tooling.
 - SQLite ledger hiện dành cho single-process/local runtime; chưa có PostgreSQL, migration framework,
@@ -56,6 +59,7 @@
   3.12.10 và 3.14.
 - Public Testnet smoke: 3 passed trong 13.53 giây trên Python 3.12, không dùng credential.
 - P4 focused suite: 39 passed, gồm private REST, User Data Stream, ledger và reconciliation.
+- P5 risk-engine focused suite: 18 passed.
 - `ruff check .`: passed; `ruff format --check .`: 56 files formatted.
 - `mypy src`: passed ở strict mode trên 30 source files.
 - `python -m pip check`: passed; no broken requirements.
@@ -63,7 +67,6 @@
 
 ## Next Gate
 
-P4 đã đạt exit criteria cho order lifecycle, idempotent persistence và reconciliation. Repository dừng
-tại phase boundary. P5 chỉ bắt đầu theo yêu cầu mới và phải thêm risk/recovery controls trước khi có
-runtime gửi lệnh. Trạng thái `P4_COMPLETE` không phải bằng chứng về hiệu quả thị trường, không cho phép
-authenticated Testnet soak và tuyệt đối không cho phép live trading.
+Hoàn thành breaker có latch, restart gate, executor bắt buộc risk approval, emergency reduce-only exit
+và audit persistence; sau đó chạy full quality gate để quyết định `P5_COMPLETE`. Trạng thái
+`P5_IN_PROGRESS` không cho phép authenticated Testnet soak hoặc live trading.
