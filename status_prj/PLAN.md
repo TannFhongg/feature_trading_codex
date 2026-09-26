@@ -41,7 +41,7 @@ Private authenticated Testnet chưa chạy vì repository không có credential 
 quyền sử dụng tài khoản. Các boundary riêng tư được kiểm tra bằng deterministic fakes theo chính sách
 Testnet-or-fake. P4 không bổ sung strategy loop, risk approval, emergency exit hay control API.
 
-## P5 — Risk & Recovery: IN PROGRESS
+## P5 — Risk & Recovery: COMPLETE
 
 Đã hoàn thành mốc risk domain/engine đầu tiên:
 
@@ -62,5 +62,10 @@ Mốc recovery/execution safety cũng đã hoàn thành:
    `reduceOnly` với deterministic client ID và query-before-retry.
 10. SQLite audit risk/emergency state cùng forward migration cho P4 position/account risk fields.
 
-Còn lại của P5 là completion report, review regression cuối và quality gate trên Python được hỗ trợ.
-Order submission vẫn tắt theo mặc định; P5 không tự bật Testnet hay live trading.
+P5 đạt final gate với 144 tests mặc định trên cả Python 3.12/3.14, 28 focused risk/recovery tests,
+Ruff, format, mypy strict và pip check đều đạt. Chi tiết tại `P5_REPORT.md`.
+
+## Phase Boundary
+
+P6 — Control API & Observability vẫn là `PLANNED/NOT_STARTED`. Order submission tiếp tục tắt theo mặc
+định; P5 không tự bật authenticated Testnet, Testnet soak hoặc live trading.

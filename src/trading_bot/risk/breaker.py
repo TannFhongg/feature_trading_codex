@@ -15,6 +15,9 @@ _LATCHING_REASONS = {
     RiskReason.MARKET_DATA_STALE,
     RiskReason.USER_DATA_STALE,
     RiskReason.EMERGENCY_STOP_ACTIVE,
+    RiskReason.POSITION_MODE_NOT_ONE_WAY,
+    RiskReason.MARGIN_MODE_NOT_ISOLATED,
+    RiskReason.MAX_LEVERAGE,
 }
 
 
@@ -76,6 +79,10 @@ class RiskCircuitBreaker:
         if snapshot.strategy_state not in {StrategyState.PAUSED, StrategyState.RECOVERING}:
             return False
         if not snapshot.reconciliation_safe or snapshot.emergency_stop_active:
+            return False
+        if not snapshot.one_way_mode or not snapshot.isolated_margin:
+            return False
+        if snapshot.leverage > self._limits.max_leverage:
             return False
         if snapshot.market_data_age_ms > self._limits.max_market_data_age_ms:
             return False

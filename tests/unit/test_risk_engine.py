@@ -97,6 +97,9 @@ def test_healthy_exposure_increase_is_approved() -> None:
         ({"market_data_age_ms": 2_001}, RiskReason.MARKET_DATA_STALE),
         ({"user_data_age_ms": 5_001}, RiskReason.USER_DATA_STALE),
         ({"emergency_stop_active": True}, RiskReason.EMERGENCY_STOP_ACTIVE),
+        ({"one_way_mode": False}, RiskReason.POSITION_MODE_NOT_ONE_WAY),
+        ({"isolated_margin": False}, RiskReason.MARGIN_MODE_NOT_ISOLATED),
+        ({"leverage": 2}, RiskReason.MAX_LEVERAGE),
     ],
 )
 def test_runtime_gates_fail_closed(changes: dict[str, object], expected: RiskReason) -> None:

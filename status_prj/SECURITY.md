@@ -17,7 +17,7 @@
 | CI security checks | `NOT_AVAILABLE` | Chưa có CI |
 | Numeric safety | `PASS_P4` | Financial models/parsers dùng `Decimal`; binary float bị reject |
 | Persistence security | `LOCAL_ONLY` | SQLite không chứa credential; account/trading data vẫn phải được bảo vệ ở deployment |
-| Runtime risk approval | `PASS_P5_FAKE` | Mọi normal submit qua risk-managed boundary; decision được audit trước durable executor |
+| Runtime risk approval | `PASS_P5_FAKE` | P5 risk-managed boundary audit decision trước durable executor; chưa có application runtime |
 | Emergency exit | `PASS_P5_FAKE` | Persist-before-mutation, cancel-all và deterministic MARKET `reduceOnly`; chưa chạy authenticated Testnet |
 
 ## Authenticated Testnet Gate
@@ -33,7 +33,7 @@ Trước khi chạy private Testnet bằng tài khoản thật phải:
 
 ## Live Canary Gate
 
-- Hoàn thành P5–P7, bao gồm caps, daily-loss limit, emergency reduce-only exit, backup/restore và soak.
+- Hoàn thành P6–P7 cùng các deployment gate còn lại, bao gồm backup/restore và soak.
 - API key chỉ có quyền Futures cần thiết, không withdrawal, bắt buộc IP whitelist.
 - Live mode mặc định false và cần phê duyệt rõ ràng của chủ dự án; P7 không tự động mở P8.
 - Không ghi raw user-data/account event nhạy cảm nếu chưa có redaction và retention policy.

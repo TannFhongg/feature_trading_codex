@@ -10,7 +10,7 @@
 | R-006 | Phí/funding xóa lợi nhuận grid | High | Backtest/ledger cùng P5 funding-rate runtime gate đã có test | `CONTROL_TESTED_P5` |
 | R-007 | Backtest quá lạc quan | High | Partial fill, latency, fee, funding, volume allocation và conservative queue; replay calibration còn thiếu | `PARTIAL_CONTROL_TESTED_P2` |
 | R-008 | Lộ API credential | Critical | `.env` ignore, redacted config repr, secret-safe errors, Testnet-first; secret manager/IP restriction còn là deployment gate | `PARTIAL_CONTROL_TESTED_P4` |
-| R-009 | Scope creep làm trễ safety work | Medium | Phase gates và boundary P1–P4 rõ ràng | `CONTROL_ACTIVE` |
+| R-009 | Scope creep làm trễ safety work | Medium | Phase gates và boundary P1–P5 rõ ràng | `CONTROL_ACTIVE` |
 | R-010 | Dependencies chưa khóa phiên bản | Medium | Bounded ranges; cần lockfile và vulnerability scan trước service dài hạn | `OPEN` |
 | R-011 | Binance đổi private/public endpoint hoặc payload | High | Strict parsers, route-specific tests, fake contracts, public Testnet smoke và review official docs | `PARTIAL_CONTROL_TESTED_P4` |
 | R-012 | SQLite hỏng/mất hoặc không phù hợp multi-process | High | WAL, transaction, reopen và P4→P5 forward-schema test; vẫn cần backup/restore và production datastore decision | `PARTIAL_CONTROL_TESTED_P5` |

@@ -136,6 +136,27 @@ class RiskEngine:
                 RiskSeverity.BLOCK,
                 "the emergency stop is latched",
             )
+        if not snapshot.one_way_mode:
+            self._add(
+                violations,
+                RiskReason.POSITION_MODE_NOT_ONE_WAY,
+                RiskSeverity.BLOCK,
+                "the MVP requires Binance one-way position mode",
+            )
+        if not snapshot.isolated_margin:
+            self._add(
+                violations,
+                RiskReason.MARGIN_MODE_NOT_ISOLATED,
+                RiskSeverity.BLOCK,
+                "the MVP requires isolated margin",
+            )
+        if snapshot.leverage > self._limits.max_leverage:
+            self._add(
+                violations,
+                RiskReason.MAX_LEVERAGE,
+                RiskSeverity.BLOCK,
+                "configured leverage exceeds the risk-policy cap",
+            )
 
     def _check_account_limits(
         self,

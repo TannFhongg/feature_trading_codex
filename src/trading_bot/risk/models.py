@@ -54,6 +54,9 @@ class RiskReason(StrEnum):
     MARKET_DATA_STALE = "MARKET_DATA_STALE"
     USER_DATA_STALE = "USER_DATA_STALE"
     EMERGENCY_STOP_ACTIVE = "EMERGENCY_STOP_ACTIVE"
+    POSITION_MODE_NOT_ONE_WAY = "POSITION_MODE_NOT_ONE_WAY"
+    MARGIN_MODE_NOT_ISOLATED = "MARGIN_MODE_NOT_ISOLATED"
+    MAX_LEVERAGE = "MAX_LEVERAGE"
     MAX_POSITION_QUANTITY = "MAX_POSITION_QUANTITY"
     MAX_POSITION_NOTIONAL = "MAX_POSITION_NOTIONAL"
     MAX_OPEN_ORDERS = "MAX_OPEN_ORDERS"
@@ -118,6 +121,7 @@ class RiskLimits:
     soft_upper_price: Decimal
     hard_lower_price: Decimal
     hard_upper_price: Decimal
+    max_leverage: int = 1
 
     def __post_init__(self) -> None:
         _validate_symbol(self.symbol)
@@ -145,8 +149,11 @@ class RiskLimits:
         soft_upper = _require_decimal("soft_upper_price", self.soft_upper_price, positive=True)
         hard_lower = _require_decimal("hard_lower_price", self.hard_lower_price, positive=True)
         hard_upper = _require_decimal("hard_upper_price", self.hard_upper_price, positive=True)
+        _require_non_negative_int("max_leverage", self.max_leverage)
         if self.max_open_orders == 0:
             raise DomainValidationError("max_open_orders must be greater than zero")
+        if not 1 <= self.max_leverage <= 125:
+            raise DomainValidationError("max_leverage must be between 1 and 125")
         if funding_limit >= 1:
             raise DomainValidationError("max_abs_funding_rate must be less than one")
         if liquidation_distance > 1:
@@ -180,6 +187,9 @@ class RuntimeRiskSnapshot:
     user_data_age_ms: int
     reconciliation_safe: bool
     emergency_stop_active: bool = False
+    one_way_mode: bool = True
+    isolated_margin: bool = True
+    leverage: int = 1
 
     def __post_init__(self) -> None:
         _validate_symbol(self.symbol)
@@ -204,6 +214,13 @@ class RuntimeRiskSnapshot:
             raise TypeError("reconciliation_safe must be bool")
         if not isinstance(self.emergency_stop_active, bool):
             raise TypeError("emergency_stop_active must be bool")
+        if not isinstance(self.one_way_mode, bool):
+            raise TypeError("one_way_mode must be bool")
+        if not isinstance(self.isolated_margin, bool):
+            raise TypeError("isolated_margin must be bool")
+        _require_non_negative_int("leverage", self.leverage)
+        if not 1 <= self.leverage <= 125:
+            raise DomainValidationError("leverage must be between 1 and 125")
 
     @property
     def daily_loss(self) -> Decimal:

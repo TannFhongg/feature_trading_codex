@@ -1,8 +1,8 @@
 # Project Contracts
 
-Trạng thái tài liệu: `P5_IN_PROGRESS`. Domain, Strategy, Simulator/Backtest, Binance Public Adapter,
+Trạng thái tài liệu: `P5_IMPLEMENTED`. Domain, Strategy, Simulator/Backtest, Binance Public Adapter,
 Private Execution Adapter và Persistence/Reconciliation Contract đã có test. Pre-trade Risk Contract
-của P5 và runtime recovery/emergency contract đã được triển khai; phase đang chờ final gate.
+của P5 và runtime recovery/emergency contract đã đạt final gate.
 
 ## Domain Contract
 
@@ -84,6 +84,7 @@ của P5 và runtime recovery/emergency contract đã được triển khai; pha
 - Mọi giá trị tài chính trong policy/snapshot/decision dùng `Decimal`; binary float bị reject.
 - Lệnh thường được xem là có khả năng tăng exposure và chỉ được duyệt khi strategy `RUNNING`, market
   và user data còn fresh, reconciliation an toàn và emergency stop chưa latch.
+- One-way Mode, Isolated Margin và leverage không vượt policy cap là điều kiện bắt buộc cho entry.
 - Position quantity, tổng position/open-order notional và số open order được kiểm tra trước submit.
 - Daily loss, drawdown, funding rate, maintenance-margin ratio, liquidation distance và price boundary
   đều có giới hạn fail-closed; hard breach yêu cầu emergency stop.
