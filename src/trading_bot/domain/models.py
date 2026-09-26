@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from decimal import Decimal
+from itertools import pairwise
 
 from trading_bot.domain.enums import GridDirection, GridType, OrderSide
 from trading_bot.domain.errors import DomainValidationError
@@ -114,3 +115,10 @@ class GridPlan:
             raise DomainValidationError("anchor level must not have an order side")
         if sum(level.side is None for level in self.levels) != 1:
             raise DomainValidationError("grid plan must contain exactly one anchor level")
+        if tuple(level.index for level in self.levels) != tuple(range(len(self.levels))):
+            raise DomainValidationError("grid level indices must be sequential")
+        prices = tuple(level.price for level in self.levels)
+        if len(set(prices)) != len(prices):
+            raise DomainValidationError("grid level prices must be unique")
+        if any(current >= following for current, following in pairwise(prices)):
+            raise DomainValidationError("grid level prices must be strictly increasing")

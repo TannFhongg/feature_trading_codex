@@ -94,6 +94,44 @@ def test_grid_plan_requires_exactly_one_anchor() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    ("levels", "message"),
+    [
+        (
+            (
+                GridLevel(index=1, price=Decimal("100"), side=None),
+                GridLevel(index=2, price=Decimal("101"), side=OrderSide.SELL),
+            ),
+            "indices",
+        ),
+        (
+            (
+                GridLevel(index=0, price=Decimal("100"), side=None),
+                GridLevel(index=1, price=Decimal("100"), side=OrderSide.SELL),
+            ),
+            "unique",
+        ),
+        (
+            (
+                GridLevel(index=0, price=Decimal("101"), side=None),
+                GridLevel(index=1, price=Decimal("100"), side=OrderSide.BUY),
+            ),
+            "increasing",
+        ),
+    ],
+)
+def test_grid_plan_rejects_invalid_level_sequences(
+    levels: tuple[GridLevel, ...], message: str
+) -> None:
+    with pytest.raises(DomainValidationError, match=message):
+        GridPlan(
+            symbol="BTCUSDT",
+            quantity_per_order=Decimal("0.01"),
+            anchor_index=0,
+            levels=levels,
+        )
+
+
 def test_strategy_state_contract_contains_recovery_and_emergency_states() -> None:
     assert StrategyState.RECOVERING.value == "RECOVERING"
     assert StrategyState.EMERGENCY_STOP.value == "EMERGENCY_STOP"
