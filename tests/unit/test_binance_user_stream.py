@@ -241,6 +241,34 @@ def test_user_stream_rejects_out_of_order_event_on_same_connection() -> None:
     assert "moved backwards" in str(error.value.__cause__)
 
 
+def test_user_stream_rejects_transaction_time_regression() -> None:
+    rest = ScriptedUserRestClient(["listen-one"])
+    source = ScriptedUserSource(
+        [
+            [
+                order_update(event_time=200, transaction_time=199),
+                order_update(event_time=201, transaction_time=198),
+            ]
+        ]
+    )
+    stream = BinanceUserDataStream(
+        rest,
+        stream_config(max_reconnect_attempts=0),
+        message_source=source,
+        sleeper=selective_sleep,
+    )
+
+    async def consume() -> None:
+        events = stream.events()
+        await anext(events)
+        await anext(events)
+
+    with pytest.raises(BinanceTransportError, match="exhausted") as error:
+        asyncio.run(consume())
+    assert isinstance(error.value.__cause__, BinanceProtocolError)
+    assert "transaction time moved backwards" in str(error.value.__cause__)
+
+
 def test_expired_listen_key_event_forces_reconnect() -> None:
     rest = ScriptedUserRestClient(["listen-one"])
     expired = json.dumps({"e": "listenKeyExpired", "E": 200, "listenKey": "listen-one"})
@@ -262,4 +290,5 @@ def test_expired_listen_key_event_forces_reconnect() -> None:
     event = asyncio.run(consume())
 
     assert isinstance(event, ListenKeyExpired)
+    assert "listen-one" not in repr(event)
     assert not stream.health().listen_key_active

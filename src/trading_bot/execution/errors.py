@@ -7,3 +7,7 @@ class ExecutionAdapterError(RuntimeError):
 
 class AmbiguousExecutionError(ExecutionAdapterError):
     """An operation may have reached the exchange but cannot yet be resolved."""
+
+
+class ExecutionIntentAlreadyRecordedError(RuntimeError):
+    """The durable intent already exists and must be queried instead of submitted again."""

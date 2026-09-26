@@ -75,6 +75,14 @@ def test_exchange_order_rejects_local_only_status_and_overfill() -> None:
 
     with pytest.raises(TypeError, match="exchange OrderStatus"):
         ExchangeOrder(**{**values, "status": OrderStatus.UNKNOWN})  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match="exchange OrderStatus"):
+        ExchangeOrder(  # type: ignore[arg-type]
+            **{**values, "status": OrderStatus.SUBMISSION_REJECTED}
+        )
+    rejected = ExchangeOrder(  # type: ignore[arg-type]
+        **{**values, "status": OrderStatus.REJECTED}
+    )
+    assert rejected.status is OrderStatus.REJECTED
     with pytest.raises(DomainValidationError, match="must not exceed"):
         ExchangeOrder(  # type: ignore[arg-type]
             **{**values, "executed_quantity": Decimal("0.003")}

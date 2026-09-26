@@ -34,7 +34,8 @@ parsing, bounded retry, routed market streams, stale detection và public Testne
 7. Cancel/fill race không được làm lùi order đã `FILLED`; cumulative executed quantity không giảm.
 8. Read-only reconciliation đối chiếu open order, query order bị thiếu, fills, positions, account và
    funding; chỉ `safe_to_resume` khi không còn orphan/unresolved/quantity/position mismatch.
-9. 108 tests mặc định đạt, 3 public Testnet smoke tests đạt; Ruff, mypy strict và pip check đạt.
+9. 113 tests mặc định đạt trên Python 3.12 và 3.14, 3 public Testnet smoke tests đạt; Ruff, mypy
+   strict và pip check đạt.
 
 Private authenticated Testnet chưa chạy vì repository không có credential và không được phép suy diễn
 quyền sử dụng tài khoản. Các boundary riêng tư được kiểm tra bằng deterministic fakes theo chính sách

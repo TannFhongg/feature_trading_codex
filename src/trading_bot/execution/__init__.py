@@ -1,6 +1,10 @@
 """Exchange-independent order execution contracts and reconciliation."""
 
-from trading_bot.execution.errors import AmbiguousExecutionError, ExecutionAdapterError
+from trading_bot.execution.errors import (
+    AmbiguousExecutionError,
+    ExecutionAdapterError,
+    ExecutionIntentAlreadyRecordedError,
+)
 from trading_bot.execution.models import (
     AccountSnapshot,
     AccountUpdate,
@@ -42,6 +46,7 @@ __all__ = [
     "ExchangeFill",
     "ExchangeOrder",
     "ExecutionAdapterError",
+    "ExecutionIntentAlreadyRecordedError",
     "ExecutionLedger",
     "ExecutionReconciler",
     "ExecutionType",

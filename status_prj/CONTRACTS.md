@@ -46,8 +46,12 @@ của P5 vẫn là `DRAFT`.
   mode; P4 không tự nạp credential hoặc bật runtime.
 - `client_order_id` deterministic, ổn định và duy nhất theo strategy/level/side/cycle, kể cả khi
   strategy ID cần normalize; độ dài tối đa 36 ký tự.
+- `PENDING_SUBMIT`, `UNKNOWN` và `SUBMISSION_REJECTED` là local-only; exchange `REJECTED` là một
+  terminal status riêng.
 - Executor phải persist intent trước network call. Submit/cancel timeout hoặc HTTP 503 phải query cùng
   client ID trước khi retry; retry có giới hạn và không đổi ID.
+- Executor không được gửi lại một intent đã tồn tại trong ledger; caller phải query/reconcile hoặc tạo
+  cycle mới.
 - Nếu query không xác định được kết quả, order local chuyển `UNKNOWN`; không được blind retry.
 - REST hỗ trợ submit/query/cancel/open orders, account trades, positions, account totals, actual
   commission rates, income records và listen-key lifecycle.
@@ -63,8 +67,11 @@ của P5 vẫn là `DRAFT`.
 - Order intent insert là idempotent. Unique constraints bảo vệ client ID, exchange order ID, trade
   business key và active logical `(strategy_id, level_index, side)`.
 - Exchange event được deduplicate trước state transition; fill duy nhất theo `(symbol, trade_id)`.
-- Late cancel/reject không được làm lùi `FILLED`; executed quantity không được giảm; timestamp local
-  của pending intent không được che exchange event timestamp đầu tiên.
+- Exchange snapshot không được thay đổi immutable fields của persisted owned intent. Duplicate
+  fill/income key với financial payload khác phải fail closed.
+- Terminal exchange status không được trở lại active; late fill progress vẫn được ghi, executed
+  quantity không được giảm và timestamp local của pending intent không được che exchange timestamp
+  đầu tiên.
 - Reconciliation không submit/cancel order. Nó lấy open orders, query local order bị thiếu, account
   trades, positions, account snapshot và funding income rồi áp dụng idempotently.
 - `safe_to_resume` chỉ true khi không có orphan remote order, unresolved local order, executed-quantity

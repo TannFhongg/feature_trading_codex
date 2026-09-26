@@ -1,7 +1,7 @@
 """Exchange-independent execution, account, and reconciliation records."""
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from enum import StrEnum
 from hashlib import sha256
@@ -94,6 +94,7 @@ class OrderStatus(StrEnum):
 
     PENDING_SUBMIT = "PENDING_SUBMIT"
     UNKNOWN = "UNKNOWN"
+    SUBMISSION_REJECTED = "SUBMISSION_REJECTED"
     NEW = "NEW"
     PARTIALLY_FILLED = "PARTIALLY_FILLED"
     FILLED = "FILLED"
@@ -116,7 +117,7 @@ class OrderStatus(StrEnum):
         return self not in {
             OrderStatus.PENDING_SUBMIT,
             OrderStatus.UNKNOWN,
-            OrderStatus.REJECTED,
+            OrderStatus.SUBMISSION_REJECTED,
         }
 
 
@@ -442,7 +443,7 @@ class ListenKeyExpired:
     """Terminal event for an expired User Data Stream listen key."""
 
     event_time_ms: int
-    listen_key: str
+    listen_key: str = field(repr=False)
 
     def __post_init__(self) -> None:
         _require_non_negative_int("event_time_ms", self.event_time_ms)

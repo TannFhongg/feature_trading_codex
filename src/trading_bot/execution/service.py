@@ -2,7 +2,11 @@
 
 from typing import Protocol
 
-from trading_bot.execution.errors import AmbiguousExecutionError, ExecutionAdapterError
+from trading_bot.execution.errors import (
+    AmbiguousExecutionError,
+    ExecutionAdapterError,
+    ExecutionIntentAlreadyRecordedError,
+)
 from trading_bot.execution.models import (
     AccountUpdate,
     ExchangeOrder,
@@ -52,14 +56,20 @@ class PersistentOrderExecutor:
         self._ledger = ledger
 
     async def submit(self, request: OrderRequest) -> ExchangeOrder:
-        await self._ledger.record_order_intent(request)
+        inserted = await self._ledger.record_order_intent(request)
+        if not inserted:
+            raise ExecutionIntentAlreadyRecordedError(
+                f"order intent {request.client_order_id} is already recorded; query or reconcile it"
+            )
         try:
             order = await self._gateway.submit_order(request)
         except AmbiguousExecutionError:
             await self._ledger.mark_order_status(request.client_order_id, OrderStatus.UNKNOWN)
             raise
         except ExecutionAdapterError:
-            await self._ledger.mark_order_status(request.client_order_id, OrderStatus.REJECTED)
+            await self._ledger.mark_order_status(
+                request.client_order_id, OrderStatus.SUBMISSION_REJECTED
+            )
             raise
         await self._ledger.apply_order_snapshot(order)
         return order

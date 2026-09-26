@@ -26,8 +26,8 @@ giữ audit trail có business-key deduplication; reconciliation chỉ đọc ex
 - Strategy ID dài hoặc cần normalize được gắn digest để tránh collision.
 - Typed records bao phủ exchange order/fill, account/balance/position, commission, income,
   order/account stream event và reconciliation report.
-- Local-only states gồm `PENDING_SUBMIT`, `UNKNOWN`, `REJECTED`; exchange statuses được phân biệt và
-  validate rõ ràng.
+- Local-only states gồm `PENDING_SUBMIT`, `UNKNOWN` và `SUBMISSION_REJECTED`; `REJECTED` được giữ riêng
+  như một terminal exchange status để local retry không bị nhầm với trạng thái exchange.
 
 ## 3. Private REST Adapter
 
@@ -37,7 +37,8 @@ giữ audit trail có business-key deduplication; reconciliation chỉ đọc ex
 - Submit tạo GTC limit order, one-way `BOTH` position side, reuse cùng deterministic client ID.
 - Timeout/503 khi submit hoặc cancel kích hoạt query-before-retry. Chỉ retry khi query xác nhận chưa có
   order hoặc order vẫn active; query failure trả ambiguous error thay vì gửi lại mù.
-- Config mặc định Testnet/read-only. Mainnet submission cần hai opt-in độc lập.
+- Config mặc định Testnet và khóa create-order; cancel vẫn khả dụng để giảm rủi ro. Mainnet submission
+  cần hai opt-in độc lập.
 - Strict parsers reject float tài chính và normalize REST payload về execution records.
 
 ## 4. User Data Stream
@@ -45,8 +46,9 @@ giữ audit trail có business-key deduplication; reconciliation chỉ đọc ex
 - Listen key được tạo/keepalive/đóng qua REST API-key calls.
 - WebSocket dùng private route, automatic ping/pong, bounded queue và reconnect backoff.
 - `listenKeyExpired` đóng vòng connection hiện tại và lấy key mới.
-- Event ordering được theo dõi theo event type trong từng connection; event đi lùi bị fail closed.
-- Health snapshot không chứa listen key hoặc credential.
+- Event ordering theo cả event time và transaction time được theo dõi theo event type trong từng
+  connection; event đi lùi bị fail closed.
+- Health snapshot và event representation không để lộ listen key hoặc credential.
 
 ## 5. Persistence Ledger
 
@@ -55,9 +57,16 @@ giữ audit trail có business-key deduplication; reconciliation chỉ đọc ex
 - Async public API dùng `asyncio.to_thread` và lock; file-backed mode bật WAL.
 - Intent được lưu idempotently trước submit. Partial unique index giữ một active logical order cho mỗi
   strategy/level/side.
+- Executor chặn submit lần hai của cùng durable intent và yêu cầu query/reconcile thay vì dựa riêng vào
+  client ID uniqueness của exchange.
+- Snapshot exchange không được đổi symbol/side/price/original quantity/reduce-only của intent đã sở hữu;
+  client ID collision hoặc external mutation bị fail closed.
 - Exchange event có deterministic event ID; fills unique theo `(symbol, trade_id)`.
+- Duplicate fill/income business key chỉ được bỏ qua khi toàn bộ financial record khớp; payload xung
+  đột bị fail closed thay vì âm thầm ghi đè hoặc bỏ qua.
 - Một transaction atomically deduplicate event, cập nhật order và insert fill.
-- Late cancel không làm lùi `FILLED`; cumulative executed quantity không giảm.
+- Terminal order không bị snapshot muộn mở lại; late fill progress vẫn được lưu và cumulative executed
+  quantity không giảm.
 - Local pending timestamp được thay bằng exchange timestamp đầu tiên để event hợp lệ tiếp theo không bị
   coi là stale.
 - File ledger đã được kiểm tra close/reopen và giữ nguyên order state.
@@ -82,17 +91,19 @@ strategy. Reconciler không có phương thức submit/cancel và không tự x�
 
 | Kiểm tra | Kết quả |
 |---|---|
-| Full pytest mặc định | 108 passed, 3 public integration tests skipped |
-| P4 focused suite | 34 passed |
-| Public Testnet integration | 3 passed trong 13.88 giây |
+| Full pytest mặc định | 113 passed, 3 public integration tests skipped |
+| Supported Python | Full gate đạt trên Python 3.12.10 và 3.14 |
+| P4 focused suite | 39 passed |
+| Public Testnet integration | 3 passed trong 13.53 giây trên Python 3.12 |
 | `ruff check .` | Passed |
 | `ruff format --check .` | Passed; 56 files formatted |
 | `mypy src` | Passed ở strict mode; 30 source files |
 | `python -m pip check` | Passed; no broken requirements |
 
-Regression coverage gồm deterministic-ID collision, disabled-by-default submission, mainnet opt-in,
-signing, timeout/503 recovery, cancel/fill race, duplicate events/fills, User Data reconnect/order,
-ledger restart, orphan/unresolved orders, fill/funding insertion và position mismatch.
+Regression coverage gồm deterministic-ID collision, duplicate-submit prevention, disabled-by-default
+submission, mainnet opt-in, signing, timeout/503 recovery, terminal/cancel/fill races, duplicate event
+và conflicting financial record, User Data `E/T` ordering, secret redaction, ledger restart,
+orphan/unresolved orders, fill/funding insertion và position mismatch.
 
 Public Testnet smoke chỉ kiểm tra P3 read-only endpoints/streams và không dùng credential. Authenticated
 private Testnet không chạy vì không có API key được cấp; private boundary dùng deterministic fake theo

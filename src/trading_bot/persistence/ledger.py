@@ -32,6 +32,13 @@ _ACTIVE_STATUSES = (
     OrderStatus.NEW,
     OrderStatus.PARTIALLY_FILLED,
 )
+_TERMINAL_EXCHANGE_STATUSES = {
+    OrderStatus.FILLED,
+    OrderStatus.CANCELED,
+    OrderStatus.EXPIRED,
+    OrderStatus.EXPIRED_IN_MATCH,
+    OrderStatus.REJECTED,
+}
 _P = ParamSpec("_P")
 _T = TypeVar("_T")
 
@@ -284,10 +291,10 @@ class SqliteExecutionLedger:
         *,
         event_time_ms: int | None = None,
     ) -> bool:
-        """Record a local UNKNOWN or REJECTED outcome after an adapter failure."""
+        """Record a local unknown or definite submission-rejection outcome."""
 
-        if status not in {OrderStatus.UNKNOWN, OrderStatus.REJECTED}:
-            raise ValueError("mark_order_status accepts only UNKNOWN or REJECTED")
+        if status not in {OrderStatus.UNKNOWN, OrderStatus.SUBMISSION_REJECTED}:
+            raise ValueError("mark_order_status accepts only UNKNOWN or SUBMISSION_REJECTED")
         timestamp = _wall_clock_ms() if event_time_ms is None else event_time_ms
         return await self._call(
             self._mark_order_status_sync,
@@ -379,6 +386,14 @@ class SqliteExecutionLedger:
         existing_order_id = existing["exchange_order_id"]
         if existing_order_id is not None and existing_order_id != order.exchange_order_id:
             raise LedgerConflictError("client order ID maps to a different exchange order")
+        if existing["strategy_id"] is not None and (
+            existing["symbol"] != order.symbol
+            or existing["side"] != order.side.value
+            or Decimal(existing["price"]) != order.price
+            or Decimal(existing["original_quantity"]) != order.original_quantity
+            or bool(existing["reduce_only"]) is not order.reduce_only
+        ):
+            raise LedgerConflictError("exchange snapshot does not match the persisted order intent")
         existing_executed = Decimal(existing["executed_quantity"])
         existing_status = OrderStatus(existing["status"])
         is_newer = (
@@ -393,6 +408,11 @@ class SqliteExecutionLedger:
             return False
         if order.executed_quantity < existing_executed:
             return False
+        next_status = order.status
+        if existing_status in _TERMINAL_EXCHANGE_STATUSES:
+            next_status = (
+                OrderStatus.FILLED if order.status is OrderStatus.FILLED else existing_status
+            )
         next_event_time = (
             order.update_time_ms
             if not existing_status.is_exchange_status
@@ -410,7 +430,7 @@ class SqliteExecutionLedger:
                 order.exchange_order_id,
                 order.symbol,
                 order.side.value,
-                order.status.value,
+                next_status.value,
                 _decimal_text(order.price),
                 _decimal_text(order.original_quantity),
                 _decimal_text(order.executed_quantity),
@@ -503,7 +523,34 @@ class SqliteExecutionLedger:
                 int(fill.maker),
             ),
         )
-        return cursor.rowcount == 1
+        if cursor.rowcount == 1:
+            return True
+        existing = self._connection.execute(
+            "SELECT * FROM fills WHERE symbol = ? AND trade_id = ?",
+            (fill.symbol, fill.trade_id),
+        ).fetchone()
+        if existing is None or not self._fill_matches_row(fill, existing):
+            raise LedgerConflictError("trade ID already belongs to a different fill")
+        if existing["client_order_id"] is None and client_order_id is not None:
+            self._connection.execute(
+                "UPDATE fills SET client_order_id = ? WHERE symbol = ? AND trade_id = ?",
+                (client_order_id, fill.symbol, fill.trade_id),
+            )
+        return False
+
+    @staticmethod
+    def _fill_matches_row(fill: ExchangeFill, row: sqlite3.Row) -> bool:
+        return (
+            row["exchange_order_id"] == fill.exchange_order_id
+            and row["side"] == fill.side.value
+            and Decimal(row["price"]) == fill.price
+            and Decimal(row["quantity"]) == fill.quantity
+            and Decimal(row["commission"]) == fill.commission
+            and row["commission_asset"] == fill.commission_asset
+            and Decimal(row["realized_pnl"]) == fill.realized_pnl
+            and row["event_time_ms"] == fill.event_time_ms
+            and bool(row["maker"]) is fill.maker
+        )
 
     async def apply_account_update(self, event: AccountUpdate) -> bool:
         return await self._call(self._apply_account_update_sync, event)
@@ -690,7 +737,20 @@ class SqliteExecutionLedger:
                         record.event_time_ms,
                     ),
                 )
-                inserted += int(cursor.rowcount == 1)
+                if cursor.rowcount == 1:
+                    inserted += 1
+                    continue
+                existing = self._connection.execute(
+                    """
+                    SELECT * FROM income_records
+                    WHERE symbol = ? AND income_type = ? AND transaction_id = ?
+                    """,
+                    (record.symbol, record.income_type, record.transaction_id),
+                ).fetchone()
+                if existing is None or not self._income_matches_row(record, existing):
+                    raise LedgerConflictError(
+                        "income transaction ID already belongs to a different record"
+                    )
             self._commit()
             return inserted
         except sqlite3.IntegrityError as error:
@@ -699,6 +759,14 @@ class SqliteExecutionLedger:
         except BaseException:
             self._rollback()
             raise
+
+    @staticmethod
+    def _income_matches_row(record: IncomeRecord, row: sqlite3.Row) -> bool:
+        return (
+            row["asset"] == record.asset
+            and Decimal(row["amount"]) == record.amount
+            and row["event_time_ms"] == record.event_time_ms
+        )
 
     async def get_order(self, client_order_id: str) -> OrderRecord | None:
         return await self._call(self._get_order_sync, client_order_id)

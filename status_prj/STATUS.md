@@ -52,9 +52,10 @@
 
 - Báo cáo: [`P1_REPORT.md`](P1_REPORT.md), [`P2_REPORT.md`](P2_REPORT.md),
   [`P3_REPORT.md`](P3_REPORT.md), [`P4_REPORT.md`](P4_REPORT.md).
-- Unit/default suite: 108 passed, 3 public integration tests skipped theo thiết kế.
-- Public Testnet smoke: 3 passed trong 13.88 giây, không dùng credential.
-- P4 focused suite: 34 passed, gồm private REST, User Data Stream, ledger và reconciliation.
+- Unit/default suite: 113 passed, 3 public integration tests skipped theo thiết kế trên cả Python
+  3.12.10 và 3.14.
+- Public Testnet smoke: 3 passed trong 13.53 giây trên Python 3.12, không dùng credential.
+- P4 focused suite: 39 passed, gồm private REST, User Data Stream, ledger và reconciliation.
 - `ruff check .`: passed; `ruff format --check .`: 56 files formatted.
 - `mypy src`: passed ở strict mode trên 30 source files.
 - `python -m pip check`: passed; no broken requirements.

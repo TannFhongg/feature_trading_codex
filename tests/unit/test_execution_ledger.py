@@ -1,4 +1,5 @@
 import asyncio
+from dataclasses import replace
 from decimal import Decimal
 
 import pytest
@@ -10,7 +11,9 @@ from trading_bot.execution import (
     AmbiguousExecutionError,
     BalanceSnapshot,
     ExchangeOrder,
+    ExecutionIntentAlreadyRecordedError,
     ExecutionType,
+    IncomeRecord,
     OrderRequest,
     OrderStatus,
     OrderTradeUpdate,
@@ -127,6 +130,25 @@ def test_exchange_timestamp_replaces_local_pending_timestamp() -> None:
     asyncio.run(scenario())
 
 
+def test_exchange_snapshot_cannot_rebind_an_owned_order_intent() -> None:
+    async def scenario() -> None:
+        async with await SqliteExecutionLedger.open(":memory:") as ledger:
+            order_request = request()
+            await ledger.record_order_intent(order_request, created_at_ms=1)
+
+            with pytest.raises(LedgerConflictError, match="persisted order intent"):
+                await ledger.apply_order_snapshot(
+                    replace(exchange_order(order_request), price=Decimal("65001.10"))
+                )
+
+            stored = await ledger.get_order(order_request.client_order_id)
+            assert stored is not None
+            assert stored.status is OrderStatus.PENDING_SUBMIT
+            assert stored.price == order_request.price
+
+    asyncio.run(scenario())
+
+
 def test_duplicate_trade_event_inserts_exactly_one_fill_and_event() -> None:
     async def scenario() -> None:
         async with await SqliteExecutionLedger.open(":memory:") as ledger:
@@ -156,6 +178,45 @@ def test_duplicate_trade_event_inserts_exactly_one_fill_and_event() -> None:
             assert not duplicate.fill_inserted
             assert len(await ledger.list_fills("BTCUSDT")) == 1
             assert await ledger.count_exchange_events() == 1
+
+    asyncio.run(scenario())
+
+
+def test_duplicate_financial_business_keys_must_match_original_records() -> None:
+    fill = order_event(
+        exchange_order(
+            request(),
+            status=OrderStatus.PARTIALLY_FILLED,
+            executed_quantity=Decimal("0.001"),
+            average_price=Decimal("65000.10"),
+            update_time_ms=10,
+        ),
+        execution_type=ExecutionType.TRADE,
+        event_time_ms=10,
+        trade_id=780,
+        last_quantity=Decimal("0.001"),
+    ).fill
+    assert fill is not None
+    income = IncomeRecord(
+        symbol="BTCUSDT",
+        income_type="FUNDING_FEE",
+        transaction_id=900,
+        asset="USDT",
+        amount=Decimal("-0.05"),
+        event_time_ms=20,
+    )
+
+    async def scenario() -> None:
+        async with await SqliteExecutionLedger.open(":memory:") as ledger:
+            assert await ledger.record_fill(fill)
+            assert not await ledger.record_fill(fill)
+            with pytest.raises(LedgerConflictError, match="different fill"):
+                await ledger.record_fill(replace(fill, commission=Decimal("0.027")))
+
+            assert await ledger.record_income_records((income,)) == 1
+            assert await ledger.record_income_records((income,)) == 0
+            with pytest.raises(LedgerConflictError, match="different record"):
+                await ledger.record_income_records((replace(income, amount=Decimal("-0.06")),))
 
     asyncio.run(scenario())
 
@@ -201,6 +262,46 @@ def test_late_cancel_event_cannot_regress_a_completed_fill() -> None:
             assert stored.status is OrderStatus.FILLED
             assert stored.executed_quantity == Decimal("0.002")
             assert len(await ledger.list_fills("BTCUSDT")) == 1
+
+    asyncio.run(scenario())
+
+
+def test_late_fill_progress_cannot_reopen_a_canceled_order() -> None:
+    async def scenario() -> None:
+        async with await SqliteExecutionLedger.open(":memory:") as ledger:
+            order_request = request()
+            await ledger.record_order_intent(order_request, created_at_ms=1)
+            await ledger.apply_order_snapshot(
+                exchange_order(
+                    order_request,
+                    status=OrderStatus.CANCELED,
+                    update_time_ms=100,
+                )
+            )
+            late_partial_fill = exchange_order(
+                order_request,
+                status=OrderStatus.PARTIALLY_FILLED,
+                executed_quantity=Decimal("0.001"),
+                average_price=Decimal("65000.10"),
+                update_time_ms=101,
+            )
+
+            result = await ledger.apply_order_event(
+                order_event(
+                    late_partial_fill,
+                    execution_type=ExecutionType.TRADE,
+                    event_time_ms=101,
+                    trade_id=779,
+                    last_quantity=Decimal("0.001"),
+                )
+            )
+
+            stored = await ledger.get_order(order_request.client_order_id)
+            assert result.order_updated
+            assert result.fill_inserted
+            assert stored is not None
+            assert stored.status is OrderStatus.CANCELED
+            assert stored.executed_quantity == Decimal("0.001")
 
     asyncio.run(scenario())
 
@@ -269,9 +370,11 @@ def test_file_ledger_survives_close_and_reopen(tmp_path: object) -> None:
 class ScriptedExecutionGateway:
     def __init__(self, response: ExchangeOrder | BaseException) -> None:
         self.response = response
+        self.submit_calls = 0
 
     async def submit_order(self, order_request: OrderRequest) -> ExchangeOrder:
         del order_request
+        self.submit_calls += 1
         if isinstance(self.response, BaseException):
             raise self.response
         return self.response
@@ -313,6 +416,24 @@ def test_persistent_executor_records_success_unknown_and_definite_rejection() ->
             with pytest.raises(BinanceApiError):
                 await rejected.submit(rejected_request)
             stored = await ledger.get_order(rejected_request.client_order_id)
-            assert stored is not None and stored.status is OrderStatus.REJECTED
+            assert stored is not None and stored.status is OrderStatus.SUBMISSION_REJECTED
+
+    asyncio.run(scenario())
+
+
+def test_persistent_executor_never_resubmits_an_existing_intent() -> None:
+    async def scenario() -> None:
+        async with await SqliteExecutionLedger.open(":memory:") as ledger:
+            order_request = request()
+            gateway = ScriptedExecutionGateway(exchange_order(order_request))
+            executor = PersistentOrderExecutor(gateway, ledger)
+
+            await executor.submit(order_request)
+            with pytest.raises(ExecutionIntentAlreadyRecordedError, match="query or reconcile"):
+                await executor.submit(order_request)
+
+            assert gateway.submit_calls == 1
+            stored = await ledger.get_order(order_request.client_order_id)
+            assert stored is not None and stored.status is OrderStatus.NEW
 
     asyncio.run(scenario())

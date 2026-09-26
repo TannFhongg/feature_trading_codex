@@ -100,6 +100,14 @@ def _event_time(event: UserDataEvent) -> int:
     return event.event_time_ms
 
 
+def _transaction_time(event: UserDataEvent) -> int | None:
+    if isinstance(event, (OrderTradeUpdate, AccountUpdate)):
+        return event.transaction_time_ms
+    if isinstance(event, UserStreamNotice):
+        return event.transaction_time_ms
+    return None
+
+
 class BinanceUserDataStream:
     """Consume private events and recreate listen keys after any connection failure."""
 
@@ -159,7 +167,7 @@ class BinanceUserDataStream:
                     self._listen_key_active = True
                     source = self._message_source.messages(self._url(listen_key))
                     keepalive_task = asyncio.create_task(self._keepalive(listen_key))
-                    event_times: dict[str, int] = {}
+                    event_times: dict[str, tuple[int, int | None]] = {}
                     while True:
                         next_message = asyncio.create_task(anext(source))
                         done, _ = await asyncio.wait(
@@ -181,13 +189,18 @@ class BinanceUserDataStream:
                         event = parse_user_data_message(raw_message)
                         kind = _event_kind(event)
                         current_event_time = _event_time(event)
-                        previous_event_time = event_times.get(kind)
-                        if (
-                            previous_event_time is not None
-                            and current_event_time < previous_event_time
-                        ):
+                        current_transaction_time = _transaction_time(event)
+                        previous_times = event_times.get(kind)
+                        if previous_times is not None and current_event_time < previous_times[0]:
                             raise BinanceProtocolError(f"{kind} event time moved backwards")
-                        event_times[kind] = current_event_time
+                        if (
+                            previous_times is not None
+                            and previous_times[1] is not None
+                            and current_transaction_time is not None
+                            and current_transaction_time < previous_times[1]
+                        ):
+                            raise BinanceProtocolError(f"{kind} transaction time moved backwards")
+                        event_times[kind] = (current_event_time, current_transaction_time)
                         self._last_event_monotonic_ms = self._monotonic_ms()
                         self._state = UserStreamState.LIVE
                         self._last_error = None
