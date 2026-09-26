@@ -8,8 +8,10 @@
 | `.env` ignored | `PASS` | `.gitignore` loại `.env` và `.env.*`, giữ `.env.example` |
 | Live trading | `DISABLED` | Chưa có runtime hoặc credential |
 | Withdrawal permission | `NOT_CONFIGURED` | API key chưa thuộc phạm vi repository |
-| Dependency scanning | `NOT_AVAILABLE` | Chưa có dependency manifest |
+| Dependency manifest | `PASS` | `pyproject.toml` chỉ có dev-tool dependencies ở P1 |
+| Dependency lock/scanning | `NOT_CONFIGURED` | Chưa có lockfile hoặc vulnerability scanner |
 | CI security checks | `NOT_AVAILABLE` | Chưa có CI |
+| Numeric safety | `PASS_P1` | Domain từ chối float; grid sử dụng `Decimal` và exchange increments |
 
 ## Required Controls Before Testnet
 

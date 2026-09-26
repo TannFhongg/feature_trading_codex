@@ -1,32 +1,21 @@
 # Implementation Plan
 
-## Milestone tiếp theo: P1 — Domain Foundation
+## P1 — Domain Foundation: COMPLETE
 
-### Phạm vi
+Đã bàn giao:
 
-1. Tạo `pyproject.toml` và package `src/trading_bot/`.
-2. Cấu hình pytest, Ruff và mypy.
-3. Tạo `.env.example` chỉ chứa placeholder an toàn.
-4. Định nghĩa `GridConfig`, `SymbolRules`, `GridLevel`, `GridType`, `GridDirection` và `StrategyState`.
-5. Xây Arithmetic Grid calculator sử dụng `Decimal`.
-6. Validate range, grid count, `tickSize`, `stepSize`, `minQty` và `minNotional`.
-7. Gán BUY/SELL quanh reference price mà không đặt level có nguy cơ khớp ngay.
-8. Viết unit test cho rounding, validation, invariants và edge cases.
+1. `pyproject.toml`, package `src/trading_bot/` và local editable environment.
+2. Cấu hình pytest, Ruff, mypy và `.env.example` an toàn.
+3. `GridConfig`, `SymbolRules`, `GridLevel`, `GridPlan` và lifecycle enums.
+4. Arithmetic Grid calculator chỉ dùng `Decimal`.
+5. Tick/step quantization, minQty/minNotional và symbol validation.
+6. Neutral BUY/SELL assignment với đúng một inactive anchor level.
+7. 27 unit tests; toàn bộ quality gates đạt.
 
-### Ngoài phạm vi P1
+## Phase Boundary
 
-- Không gọi Binance API.
-- Không lưu database.
-- Không gửi lệnh thật hoặc Testnet order.
-- Chưa triển khai Geometric, Long hoặc Short Grid.
-- Chưa có web UI.
+Không có phase triển khai nào đang được phép tiếp tục trong phạm vi hiện tại. P2 — Simulator & Backtest Core vẫn là `PLANNED/NOT_STARTED`; cần yêu cầu mới trước khi thay đổi mã nguồn cho P2.
 
-## Definition of Done
+## P2 Preview — Chưa triển khai
 
-- `pytest` thành công.
-- `ruff check .` và `ruff format --check .` thành công.
-- `mypy src` thành công.
-- Không dùng `float` trong domain tiền tệ.
-- Grid có đúng số level, giá duy nhất, đã quantize và nằm trong range.
-- Code strategy không import module Binance, HTTP, WebSocket hoặc persistence.
-- `STATUS.md`, `PHASES.md`, `CONTRACTS.md` và `SCHEDULE.md` được cập nhật cùng commit hoàn tất phase.
+Khi được phê duyệt, P2 dự kiến mô phỏng order intents, partial fills, maker/taker fees, funding và báo cáo PnL/drawdown. Preview này chỉ phục vụ lập kế hoạch và không phải bằng chứng P2 đã bắt đầu.

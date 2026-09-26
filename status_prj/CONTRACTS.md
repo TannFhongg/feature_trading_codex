@@ -1,30 +1,35 @@
 # Project Contracts
 
-Trạng thái tài liệu: `DRAFT`. Các contract dưới đây là yêu cầu thiết kế cho P1–P5; chưa có runtime implementation.
+Trạng thái tài liệu: `P1_IMPLEMENTED`. Domain và Strategy Contract đã có unit tests; Exchange Adapter và các runtime Safety Invariants vẫn là `DRAFT`.
 
 ## Domain Contract
 
 - Mọi giá, quantity, fee, funding và PnL dùng `Decimal`.
 - `lower_price > 0`, `upper_price > lower_price`, `grid_count >= 2`.
-- MVP chỉ enable `ARITHMETIC` và `NEUTRAL`; enum vẫn có thể khai báo các giá trị tương lai nhưng phải reject nếu chưa hỗ trợ.
+- P1 chỉ enable `ARITHMETIC` và `NEUTRAL`; các enum tương lai bị reject khi tạo config.
 - `SymbolRules` cung cấp `tick_size`, `step_size`, `min_qty` và `min_notional`.
 - Mọi grid price phải duy nhất sau quantization và nằm trong `[lower_price, upper_price]`.
+- `grid_count` là số interval; kết quả có `grid_count + 1` price levels.
+- Config và symbol rules phải cùng symbol viết hoa.
 
 ## Strategy Contract
 
 - BUY nằm dưới reference price; SELL nằm trên reference price.
 - Không gửi order từ module strategy; module chỉ tạo intent.
+- Neutral Grid có đúng một anchor không mang order side; tie chọn price thấp hơn để deterministic.
+- Lower bound được ceil theo tick; upper bound, intermediate prices và quantity được floor theo exchange increment.
+- Mọi active level phải đạt `min_notional`; quantity sau quantization phải đạt `min_qty`.
 - Partial fill chỉ sinh replacement intent cho filled quantity hợp lệ.
 - Một strategy/level/side chỉ có tối đa một active logical order.
 
-## Exchange Adapter Contract
+## Exchange Adapter Contract — DRAFT
 
 - Interface async cho time sync, exchange rules, market stream, submit, cancel và query.
 - `client_order_id` là deterministic và unique theo strategy/level/side/cycle.
 - Timeout hoặc HTTP 503 trạng thái unknown phải query/reconcile trước khi retry.
 - User Data Stream là nguồn sự kiện thời gian thực; REST dùng để đối soát.
 
-## Safety Invariants
+## Runtime Safety Invariants — DRAFT
 
 - Không tăng exposure khi market/user data stale hoặc reconciliation chưa hoàn tất.
 - Risk engine duyệt mọi execution intent.
