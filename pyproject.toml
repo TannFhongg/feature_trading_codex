@@ -30,6 +30,9 @@ trading_bot = ["py.typed"]
 addopts = "-ra --strict-config --strict-markers"
 pythonpath = ["src"]
 testpaths = ["tests"]
+markers = [
+    "integration: requires network access to Binance Futures Testnet",
+]
 
 [tool.ruff]
 line-length = 100
